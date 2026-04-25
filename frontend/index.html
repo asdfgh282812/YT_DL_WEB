@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>影片下載網頁系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .progress-bar-striped {
+            background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
+            background-size: 1rem 1rem;
+        }
+        .progress-bar-animated {
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        @keyframes progress-bar-stripes {
+            from { background-position: 1rem 0; }
+            to { background-position: 0 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 font-sans">
+    <div id="app" v-cloak class="max-w-4xl mx-auto p-4 md:p-8">
+        
+        <!-- Auth Overlay -->
+        <div v-if="!isAuthenticated" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white p-8 rounded-lg shadow-xl w-96 max-w-full">
+                <h2 class="text-2xl font-bold mb-4 text-center">系統登入</h2>
+                <input v-model="tokenInput" @keyup.enter="login" type="password" placeholder="請輸入 AUTH_TOKEN" class="w-full border rounded p-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button @click="login" class="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition">登入</button>
+                <p v-if="authError" class="text-red-500 mt-2 text-center text-sm">{{ authError }}</p>
+            </div>
+        </div>
+
+        <template v-else>
+            <header class="flex justify-between items-center mb-8 bg-white p-4 rounded-lg shadow">
+                <h1 class="text-2xl font-bold text-gray-800">影片下載系統</h1>
+                <div class="flex gap-2">
+                    <button @click="showSettings = true" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded transition">
+                        設定
+                    </button>
+                    <button @click="logout" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition">
+                        登出
+                    </button>
+                </div>
+            </header>
+
+            <!-- Main Input Area -->
+            <div class="bg-white p-6 rounded-lg shadow mb-8">
+                <div class="flex gap-2 mb-4">
+                    <input v-model="url" @keyup.enter="parseUrl" type="text" placeholder="請輸入影片網址 (YouTube, Bilibili等)..." class="flex-1 border rounded p-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button @click="parseUrl" :disabled="isParsing || !url" class="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-6 py-3 rounded transition whitespace-nowrap">
+                        <span v-if="isParsing">解析中...</span>
+                        <span v-else>解析</span>
+                    </button>
+                </div>
+
+                <!-- Parse Results -->
+                <div v-if="parseResult" class="mt-4 p-4 border rounded bg-gray-50">
+                    <h3 class="font-bold text-lg mb-2 truncate" :title="parseResult.title">{{ parseResult.title }}</h3>
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <div class="flex-1 min-w-[200px]">
+                            <label class="block text-sm text-gray-600 mb-1">下載選項：</label>
+                            <select v-model="selectedFormat" class="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                <option value="audio_only">純音訊 (MP3)</option>
+                                <optgroup label="影片 (MP4)">
+                                    <option v-for="fmt in parseResult.video_formats" :key="fmt.id" :value="fmt.id">
+                                        {{ fmt.resolution }} ({{ fmt.ext }})
+                                    </option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <button @click="startDownload" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded transition h-[42px]">
+                            加入下載佇列
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task List -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">下載任務 ({{ tasks.length }})</h2>
+                    <span class="text-sm text-gray-500">連接狀態: 
+                        <span :class="{'text-green-500': wsConnected, 'text-red-500': !wsConnected}">
+                            {{ wsConnected ? '已連線' : '斷線' }}
+                        </span>
+                    </span>
+                </div>
+
+                <div v-if="tasks.length === 0" class="text-center text-gray-500 py-8">
+                    目前沒有下載任務
+                </div>
+
+                <div class="space-y-4">
+                    <div v-for="task in reversedTasks" :key="task.task_id" class="border rounded p-4 relative overflow-hidden">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex-1 min-w-0 pr-4">
+                                <h4 class="font-semibold truncate" :title="task.title">{{ task.title }}</h4>
+                                <div class="text-xs text-gray-500 mt-1 flex gap-3">
+                                    <span class="uppercase border px-1 rounded bg-gray-100">{{ task.is_audio_only ? 'MP3' : 'MP4' }}</span>
+                                    <span>狀態: {{ getStatusText(task.state) }}</span>
+                                    <span v-if="task.state === 'DOWNLOADING'">速度: {{ task.speed || '計算中...' }}</span>
+                                    <span v-if="task.state === 'DOWNLOADING'">剩餘時間: {{ task.eta || '--' }}</span>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button v-if="task.state === 'COMPLETED'" @click="downloadFile(task)" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded">
+                                    下載至電腦
+                                </button>
+                                <button @click="deleteTask(task.task_id)" class="text-red-500 hover:bg-red-100 p-1 rounded">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 mb-1 mt-3">
+                            <div class="h-2.5 rounded-full transition-all duration-300"
+                                 :class="getProgressBarClass(task.state)"
+                                 :style="`width: ${task.state === 'COMPLETED' ? 100 : task.progress}%`">
+                            </div>
+                        </div>
+                        <div v-if="task.state === 'ERROR'" class="text-xs text-red-500 mt-1">
+                            {{ task.error_msg }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Modal -->
+            <div v-if="showSettings" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white p-6 rounded-lg shadow-xl w-96 max-w-full">
+                    <h2 class="text-xl font-bold mb-4">系統設定</h2>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm text-gray-700 mb-2">最大同時下載數</label>
+                        <input v-model.number="tempConfig.max_concurrent_downloads" type="number" min="1" max="10" class="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <div class="mb-6 border-t pt-4">
+                        <h3 class="text-sm font-bold text-gray-700 mb-2">系統維護</h3>
+                        <button @click="updateYtDlp" :disabled="isUpdating" class="w-full bg-gray-800 hover:bg-gray-900 text-white py-2 rounded transition flex justify-center items-center">
+                            <span v-if="isUpdating">更新中...請稍候</span>
+                            <span v-else>一鍵更新 yt-dlp</span>
+                        </button>
+                        <p v-if="updateMsg" class="text-xs mt-2" :class="updateSuccess ? 'text-green-600' : 'text-red-600'">{{ updateMsg }}</p>
+                    </div>
+
+                    <div class="flex justify-end gap-2 border-t pt-4">
+                        <button @click="showSettings = false" class="px-4 py-2 border rounded hover:bg-gray-100">取消</button>
+                        <button @click="saveSettings" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">儲存</button>
+                    </div>
+                </div>
+            </div>
+
+        </template>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
