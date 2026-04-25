@@ -22,6 +22,25 @@ createApp({
         const isUpdating = ref(false);
         const updateMsg = ref('');
         const updateSuccess = ref(false);
+        const ytdlpVersion = ref('讀取中...');
+
+        const fetchVersion = async () => {
+            try {
+                const res = await fetch('/api/version', { headers: getHeaders() });
+                if (res.ok) {
+                    const data = await res.json();
+                    ytdlpVersion.value = data.version;
+                }
+            } catch (e) {
+                ytdlpVersion.value = '無法取得';
+            }
+        };
+
+        const openSettings = () => {
+            showSettings.value = true;
+            tempConfig.value = { ...config.value };
+            fetchVersion();
+        };
 
         // Check local storage for token
         onMounted(() => {
@@ -221,7 +240,12 @@ createApp({
                 if (!res.ok) throw new Error(data.detail || '更新失敗');
                 
                 updateSuccess.value = true;
-                updateMsg.value = '更新成功！';
+                if (data.new_version) {
+                    ytdlpVersion.value = data.new_version;
+                    updateMsg.value = `更新成功！已升級至版本: ${data.new_version}`;
+                } else {
+                    updateMsg.value = '更新成功！';
+                }
             } catch (e) {
                 updateSuccess.value = false;
                 updateMsg.value = '更新失敗: ' + e.message;
@@ -258,7 +282,8 @@ createApp({
             tasks, reversedTasks, wsConnected, deleteTask, downloadFile,
             showSettings, tempConfig, saveSettings,
             isUpdating, updateMsg, updateSuccess, updateYtDlp,
-            getStatusText, getProgressBarClass
+            getStatusText, getProgressBarClass,
+            ytdlpVersion, openSettings // <--- 補上這兩個
         };
     }
 }).mount('#app');

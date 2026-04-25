@@ -6,6 +6,8 @@ import shutil
 import subprocess
 import time
 import uuid
+import sys          # <--- 新增這行
+import importlib    # <--- 新增這行
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -465,17 +467,34 @@ async def update_config(req: ConfigRequest, authorization: Optional[str] = Heade
     await broadcast_state()
     return {"success": True}
 
+@app.get("/api/version")
+async def get_version(authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
+    import yt_dlp
+    # 取得目前載入記憶體中的 yt-dlp 版本
+    version = getattr(yt_dlp.version, '__version__', '未知版本')
+    return {"version": version}
+
 @app.post("/api/update-ytdlp")
 async def update_ytdlp(authorization: Optional[str] = Header(None)):
     verify_token(authorization)
     try:
-        process = subprocess.Popen(["pip", "install", "--upgrade", "yt-dlp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # 使用 sys.executable 確保使用目前環境的 pip
+        process = subprocess.Popen([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, stderr = process.communicate()
         if process.returncode != 0:
              raise Exception(stderr.decode())
-        return {"success": True, "output": stdout.decode()}
+
+        # 【核心邏輯】：重新載入 yt-dlp 模組
+        # 因為 Python 程式已經在執行，如果不 reload，系統還是會用舊版抓影片
+        import yt_dlp
+        importlib.reload(yt_dlp)
+
+        # 取得更新後的新版本號
+        new_version = getattr(yt_dlp.version, '__version__', '未知版本')
+
+        return {"success": True, "output": stdout.decode(), "new_version": new_version}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 # Mount frontend
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
