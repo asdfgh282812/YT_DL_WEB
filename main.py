@@ -157,7 +157,7 @@ def get_common_ydl_opts() -> dict:
         'logger': MyLogger(),
         'quiet': True,
         'no_warnings': True,
-        'nocheckcertificate': True,
+        'nocheckcertificate': True, 'legacyserverconnect': True, 'no_check_certificates': True,
         'extractor_args': {'youtube': ['player_client=ios,tv,web']}
     }
     if os.path.exists(COOKIE_FILE):
@@ -355,12 +355,44 @@ async def parse_url(req: ParseRequest, authorization: Optional[str] = Header(Non
         ydl_opts = get_common_ydl_opts()
         ydl_opts.update({
             # 在最後面補上 bestaudio，讓純音樂也能順利過關
-            'format': 'bestvideo+bestaudio/best/bestaudio/best'
+            'format': 'bestvideo+bestaudio/best/bestaudio/best',
+            'extract_flat': 'in_playlist'
         })
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)
             
         title = info.get('title', 'Unknown Title')
+        
+        # Handle playlist
+        if 'entries' in info:
+            entries = []
+            for entry in info['entries']:
+                if entry is None:
+                    continue
+                entry_title = entry.get('title', '')
+                if not entry_title or entry_title in ['[Deleted video]', '[Private video]']:
+                    continue
+                entry_url = entry.get('url') or entry.get('id')
+                if not entry_url:
+                    continue
+                    
+                # Fix url if it is just an id
+                if not entry_url.startswith('http'):
+                    entry_url = f"https://www.youtube.com/watch?v={entry_url}"
+                    
+                entries.append({
+                    "title": entry_title,
+                    "url": entry_url
+                })
+                
+            return {
+                "is_playlist": True,
+                "title": title,
+                "item_count": len(entries),
+                "entries": entries
+            }
+        
+        # Handle single video
         formats = info.get('formats', [])
         
         # Filter formats
@@ -394,6 +426,7 @@ async def parse_url(req: ParseRequest, authorization: Optional[str] = Header(Non
         sorted_videos = sorted(unique_videos.values(), key=lambda x: int(x['resolution'].replace('p', '')), reverse=True)
 
         return {
+            "is_playlist": False,
             "title": title,
             "video_formats": sorted_videos
         }
@@ -406,6 +439,14 @@ class DownloadRequest(BaseModel):
     format_id: str
     is_audio_only: bool
     title: str
+
+class BatchDownloadItem(BaseModel):
+    url: str
+    title: str
+
+class BatchDownloadRequest(BaseModel):
+    items: list[BatchDownloadItem]
+    is_audio_only: bool
 
 @app.post("/api/download")
 async def add_download(req: DownloadRequest, authorization: Optional[str] = Header(None)):
@@ -425,6 +466,29 @@ async def add_download(req: DownloadRequest, authorization: Optional[str] = Head
     await broadcast_state()
     
     return {"task_id": task_id}
+
+@app.post("/api/download/batch")
+async def add_batch_download(req: BatchDownloadRequest, authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
+    
+    count = 0
+    for item in req.items:
+        task_id = str(uuid.uuid4())
+        task = DownloadTask(
+            task_id=task_id,
+            url=item.url,
+            format_id="", # Empty format id for audio_only which is default for batch
+            is_audio_only=req.is_audio_only,
+            title=item.title
+        )
+        tasks[task_id] = task
+        await task_queue.put(task_id)
+        count += 1
+        
+    if count > 0:
+        await broadcast_state()
+        
+    return {"added_count": count}
 
 @app.get("/api/download/{task_id}")
 async def get_download_file(task_id: str, token: str):

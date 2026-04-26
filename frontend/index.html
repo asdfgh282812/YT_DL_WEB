@@ -201,30 +201,63 @@
                     <!-- Parse Results -->
                     <transition name="slide-up">
                         <div v-if="parseResult" class="glass-panel p-6 rounded-2xl border-t border-white/20 bg-gradient-to-b from-white/5 to-transparent">
-                            <div class="flex items-start gap-4 mb-5 pb-5 border-b border-white/10">
-                                <div class="bg-white/10 p-3 rounded-xl shrink-0">
-                                    <svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            <template v-if="parseResult.is_playlist">
+                                <div class="flex items-start gap-4 mb-5 pb-5 border-b border-white/10">
+                                    <div class="bg-white/10 p-3 rounded-xl shrink-0">
+                                        <svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                    </div>
+                                    <div class="flex-1 overflow-hidden">
+                                        <h3 class="font-bold text-lg text-white truncate leading-tight pt-1" :title="parseResult.title">{{ parseResult.title }}</h3>
+                                        <p class="text-sm text-indigo-300 mt-1">共 {{ parseResult.item_count }} 首</p>
+                                    </div>
                                 </div>
-                                <h3 class="font-bold text-lg text-white truncate leading-tight pt-1" :title="parseResult.title">{{ parseResult.title }}</h3>
-                            </div>
+                                <div class="flex flex-col gap-4">
+                                    <div class="max-h-48 overflow-y-auto glass-input rounded-xl p-3 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+                                        <div v-for="(item, index) in parseResult.entries" :key="index" class="text-sm text-slate-300 truncate py-1 border-b border-white/5 last:border-0 hover:text-white transition-colors">
+                                            {{ index + 1 }}. {{ item.title }}
+                                        </div>
+                                    </div>
+                                    <button @click="startBatchDownload" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
+                                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                        全部下載為 MP3
+                                    </button>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div class="flex items-start gap-4 mb-5 pb-5 border-b border-white/10">
+                                    <div class="bg-white/10 p-3 rounded-xl shrink-0">
+                                        <svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-lg text-white truncate leading-tight pt-1" :title="parseResult.title">{{ parseResult.title }}</h3>
+                                </div>
 
-                            <div class="flex flex-col gap-4">
-                                <div class="flex-1">
-                                    <label class="block text-sm font-medium text-slate-400 mb-2">請選擇下載格式：</label>
-                                    <select v-model="selectedFormat" class="w-full glass-input rounded-xl p-3 transition-all cursor-pointer">
-                                        <option value="audio_only" class="font-medium text-indigo-300">🎵 純音訊 (MP3)</option>
-                                        <optgroup label="🎬 影片畫質 (MP4)">
-                                            <option v-for="fmt in parseResult.video_formats" :key="fmt.id" :value="fmt.id">
-                                                {{ fmt.resolution }} ({{ fmt.ext }})
-                                            </option>
-                                        </optgroup>
-                                    </select>
+                                <div class="flex flex-col gap-4">
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-medium text-slate-400 mb-2">請選擇下載格式：</label>
+                                        <select v-model="selectedFormat" class="w-full glass-input rounded-xl p-3 transition-all cursor-pointer">
+                                            <option value="audio_only" class="font-medium text-indigo-300">🎵 純音訊 (MP3)</option>
+                                            <optgroup label="🎬 影片畫質 (MP4)">
+                                                <option v-for="fmt in parseResult.video_formats" :key="fmt.id" :value="fmt.id">
+                                                    {{ fmt.resolution }} ({{ fmt.ext }})
+                                                </option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                    <button @click="startDownload" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
+                                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                        加入下載佇列
+                                    </button>
                                 </div>
-                                <button @click="startDownload" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
-                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                    加入下載佇列
-                                </button>
-                            </div>
+                            </template>
+                        </div>
+                    </transition>
+
+                    <!-- Batch Download Messages -->
+                    <transition name="slide-up">
+                        <div v-if="batchDownloadMsg" class="mt-4 p-4 rounded-xl border flex items-center gap-3 backdrop-blur-md" :class="batchDownloadSuccess ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'">
+                            <svg v-if="batchDownloadSuccess" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg v-else class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <span class="font-medium text-sm">{{ batchDownloadMsg }}</span>
                         </div>
                     </transition>
                 </div>

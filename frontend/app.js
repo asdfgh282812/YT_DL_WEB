@@ -229,7 +229,7 @@ createApp({
                 }
 
                 parseResult.value = await res.json();
-                if (parseResult.value.video_formats.length > 0) {
+                if (!parseResult.value.is_playlist && parseResult.value.video_formats && parseResult.value.video_formats.length > 0) {
                     selectedFormat.value = parseResult.value.video_formats[0].id; // Default to best video
                 }
             } catch (e) {
@@ -237,6 +237,45 @@ createApp({
                 if (e.message.includes('登入')) logout();
             } finally {
                 isParsing.value = false;
+            }
+        };
+
+        const batchDownloadMsg = ref('');
+        const batchDownloadSuccess = ref(false);
+
+        const startBatchDownload = async () => {
+            if (!parseResult.value || !parseResult.value.is_playlist) return;
+            
+            try {
+                const res = await fetch('/api/download/batch', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        items: parseResult.value.entries.map(e => ({ url: e.url, title: e.title })),
+                        is_audio_only: true // Always use audio only for playlists
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '批次加入下載失敗');
+                }
+                
+                const data = await res.json();
+                url.value = '';
+                parseResult.value = null;
+                
+                batchDownloadMsg.value = `成功加入 ${data.added_count} 筆下載任務`;
+                batchDownloadSuccess.value = true;
+                setTimeout(() => {
+                    batchDownloadMsg.value = '';
+                }, 3000);
+            } catch (e) {
+                batchDownloadMsg.value = e.message;
+                batchDownloadSuccess.value = false;
+                setTimeout(() => {
+                    batchDownloadMsg.value = '';
+                }, 3000);
             }
         };
 
@@ -365,7 +404,8 @@ createApp({
             getStatusText, getProgressBarClass,
             ytdlpVersion, openSettings,
             cookieStatus, cookieFile, cookieMsg, cookieMsgSuccess, isUploadingCookie, cookieFileInput,
-            handleCookieFileChange, uploadCookie
+            handleCookieFileChange, uploadCookie,
+            batchDownloadMsg, batchDownloadSuccess, startBatchDownload
         };
     }
 }).mount('#app');
