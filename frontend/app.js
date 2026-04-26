@@ -347,12 +347,12 @@ createApp({
 
         const getProgressBarClass = (state) => {
             switch(state) {
-                case 'QUEUED': return 'bg-gray-400';
-                case 'DOWNLOADING': return 'bg-blue-500 progress-bar-striped progress-bar-animated';
-                case 'PROCESSING': return 'bg-yellow-500 progress-bar-striped progress-bar-animated';
-                case 'COMPLETED': return 'bg-green-500';
-                case 'ERROR': return 'bg-red-500';
-                default: return 'bg-gray-400';
+                case 'QUEUED': return 'bg-slate-500';
+                case 'DOWNLOADING': return 'bg-gradient-to-r from-blue-500 to-indigo-500 progress-bar-striped animate-stripes';
+                case 'PROCESSING': return 'bg-gradient-to-r from-amber-500 to-orange-500 progress-bar-striped animate-stripes';
+                case 'COMPLETED': return 'bg-gradient-to-r from-emerald-400 to-teal-500 shadow-[0_0_10px_rgba(52,211,153,0.5)]';
+                case 'ERROR': return 'bg-gradient-to-r from-rose-500 to-red-600';
+                default: return 'bg-slate-500';
             }
         };
 
