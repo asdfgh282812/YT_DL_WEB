@@ -157,7 +157,8 @@ def get_common_ydl_opts() -> dict:
         'logger': MyLogger(),
         'quiet': True,
         'no_warnings': True,
-        'nocheckcertificate': True
+        'nocheckcertificate': True,
+        'extractor_args': {'youtube': ['player_client=ios,tv,web']}
     }
     if os.path.exists(COOKIE_FILE):
         opts['cookiefile'] = COOKIE_FILE
@@ -353,7 +354,8 @@ async def parse_url(req: ParseRequest, authorization: Optional[str] = Header(Non
     try:
         ydl_opts = get_common_ydl_opts()
         ydl_opts.update({
-            'format': 'bestvideo+bestaudio/best/best'
+            # 在最後面補上 bestaudio，讓純音樂也能順利過關
+            'format': 'bestvideo+bestaudio/best/bestaudio/best'
         })
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)
