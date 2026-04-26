@@ -24,6 +24,82 @@ createApp({
         const updateSuccess = ref(false);
         const ytdlpVersion = ref('讀取中...');
 
+        const cookieStatus = ref(false);
+        const cookieFile = ref(null);
+        const cookieMsg = ref('');
+        const cookieMsgSuccess = ref(false);
+        const isUploadingCookie = ref(false);
+        const cookieFileInput = ref(null);
+
+        const fetchCookieStatus = async () => {
+            try {
+                const res = await fetch('/api/cookie-status', { headers: getHeaders() });
+                if (res.ok) {
+                    const data = await res.json();
+                    cookieStatus.value = data.exists;
+                }
+            } catch (e) {
+                console.error("無法取得 Cookie 狀態", e);
+            }
+        };
+
+        const handleCookieFileChange = (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                cookieFile.value = e.target.files[0];
+            } else {
+                cookieFile.value = null;
+            }
+        };
+
+        const uploadCookie = async () => {
+            if (!cookieFile.value) return;
+
+            isUploadingCookie.value = true;
+            cookieMsg.value = '';
+
+            const formData = new FormData();
+            formData.append('file', cookieFile.value);
+
+            try {
+                const res = await fetch('/api/upload-cookie', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken.value}`
+                    },
+                    body: formData
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.detail || '上傳失敗');
+                }
+
+                cookieMsgSuccess.value = true;
+                cookieMsg.value = data.message || 'Cookie 更新成功！';
+
+                // Clear the file input
+                if (cookieFileInput.value) {
+                    cookieFileInput.value.value = '';
+                }
+                cookieFile.value = null;
+
+                // Refresh status
+                await fetchCookieStatus();
+
+            } catch (e) {
+                cookieMsgSuccess.value = false;
+                cookieMsg.value = e.message;
+            } finally {
+                isUploadingCookie.value = false;
+
+                // Hide message after 3 seconds
+                setTimeout(() => {
+                    cookieMsg.value = '';
+                }, 3000);
+            }
+        };
+
         const fetchVersion = async () => {
             try {
                 const res = await fetch('/api/version', { headers: getHeaders() });
@@ -40,6 +116,7 @@ createApp({
             showSettings.value = true;
             tempConfig.value = { ...config.value };
             fetchVersion();
+            fetchCookieStatus();
         };
 
         // Check local storage for token
@@ -283,7 +360,9 @@ createApp({
             showSettings, tempConfig, saveSettings,
             isUpdating, updateMsg, updateSuccess, updateYtDlp,
             getStatusText, getProgressBarClass,
-            ytdlpVersion, openSettings // <--- 補上這兩個
+            ytdlpVersion, openSettings,
+            cookieStatus, cookieFile, cookieMsg, cookieMsgSuccess, isUploadingCookie, cookieFileInput,
+            handleCookieFileChange, uploadCookie
         };
     }
 }).mount('#app');
