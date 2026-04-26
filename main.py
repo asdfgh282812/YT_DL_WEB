@@ -226,7 +226,7 @@ def perform_download(task: DownloadTask):
             final_ext = "mp3"
         else:
             # Video: format_id + bestaudio, convert to mp4
-            format_str = f"{task.format_id}+bestaudio/best" if task.format_id else 'bestvideo+bestaudio/best'
+            format_str = f"{task.format_id}+bestaudio/bestvideo+bestaudio/best/best" if task.format_id else 'bestvideo+bestaudio/best/best'
             ydl_opts.update({
                 'format': format_str,
                 'merge_output_format': 'mp4',
@@ -352,6 +352,9 @@ async def parse_url(req: ParseRequest, authorization: Optional[str] = Header(Non
     verify_token(authorization)
     try:
         ydl_opts = get_common_ydl_opts()
+        ydl_opts.update({
+            'format': 'bestvideo+bestaudio/best/best'
+        })
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)
             

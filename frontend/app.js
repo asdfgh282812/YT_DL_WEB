@@ -328,6 +328,9 @@ createApp({
                 updateMsg.value = '更新失敗: ' + e.message;
             } finally {
                 isUpdating.value = false;
+                setTimeout(() => {
+                    updateMsg.value = '';
+                }, 3000);
             }
         };
 
