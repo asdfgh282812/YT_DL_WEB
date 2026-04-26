@@ -11,7 +11,7 @@ import importlib    # <--- 新增這行
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, Request, BackgroundTasks
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, Request, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +23,7 @@ AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "your_secure_password_here")
 TEMP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "temp"))
 CONFIG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "config"))
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+COOKIE_FILE = os.path.join(CONFIG_DIR, "cookies.txt")
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -151,6 +152,17 @@ class MyLogger(object):
     def error(self, msg):
         logger.error(msg)
 
+def get_common_ydl_opts() -> dict:
+    opts = {
+        'logger': MyLogger(),
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True
+    }
+    if os.path.exists(COOKIE_FILE):
+        opts['cookiefile'] = COOKIE_FILE
+    return opts
+
 def yt_dlp_hook(d):
     # This hook is called synchronously by yt-dlp, we need to carefully update state
     # and we can't await in it directly. We'll queue updates if needed, or rely on 
@@ -197,13 +209,10 @@ def perform_download(task: DownloadTask):
     try:
         outtmpl = os.path.join(TEMP_DIR, f"{task.task_id}.%(ext)s")
         
-        ydl_opts = {
+        ydl_opts = get_common_ydl_opts()
+        ydl_opts.update({
             'outtmpl': outtmpl,
-            'logger': MyLogger(),
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True
-        }
+        })
 
         if task.is_audio_only:
             ydl_opts.update({
@@ -342,11 +351,7 @@ class ParseRequest(BaseModel):
 async def parse_url(req: ParseRequest, authorization: Optional[str] = Header(None)):
     verify_token(authorization)
     try:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True
-        }
+        ydl_opts = get_common_ydl_opts()
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.url, download=False)
             
@@ -474,6 +479,30 @@ async def get_version(authorization: Optional[str] = Header(None)):
     # 取得目前載入記憶體中的 yt-dlp 版本
     version = getattr(yt_dlp.version, '__version__', '未知版本')
     return {"version": version}
+
+@app.get("/api/cookie-status")
+async def get_cookie_status(authorization: Optional[str] = Header(None)):
+    verify_token(authorization)
+    exists = os.path.exists(COOKIE_FILE)
+    return {"exists": exists}
+
+@app.post("/api/upload-cookie")
+async def upload_cookie(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None)
+):
+    verify_token(authorization)
+    if not file.filename.endswith(".txt"):
+        raise HTTPException(status_code=400, detail="Only .txt files are allowed")
+
+    try:
+        content = await file.read()
+        with open(COOKIE_FILE, "wb") as f:
+            f.write(content)
+        return {"success": True, "message": "Cookie 檔案上傳成功"}
+    except Exception as e:
+        logger.error(f"Failed to upload cookie: {e}")
+        raise HTTPException(status_code=500, detail="儲存 Cookie 檔案時發生錯誤")
 
 @app.post("/api/update-ytdlp")
 async def update_ytdlp(authorization: Optional[str] = Header(None)):
