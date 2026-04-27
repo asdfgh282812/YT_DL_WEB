@@ -11,6 +11,7 @@ createApp({
         const isParsing = ref(false);
         const parseResult = ref(null);
         const selectedFormat = ref('audio_only');
+        const batchDownloadFormat = ref('video');
 
         const tasks = ref([]);
         const wsConnected = ref(false);
@@ -229,6 +230,13 @@ createApp({
                 }
 
                 parseResult.value = await res.json();
+
+                if (parseResult.value.is_playlist && parseResult.value.entries) {
+                    parseResult.value.entries.forEach(entry => {
+                        entry.selected = true;
+                    });
+                }
+
                 if (!parseResult.value.is_playlist && parseResult.value.video_formats && parseResult.value.video_formats.length > 0) {
                     selectedFormat.value = parseResult.value.video_formats[0].id; // Default to best video
                 }
@@ -243,16 +251,38 @@ createApp({
         const batchDownloadMsg = ref('');
         const batchDownloadSuccess = ref(false);
 
+        const selectedCount = computed(() => {
+            if (!parseResult.value || !parseResult.value.is_playlist || !parseResult.value.entries) return 0;
+            return parseResult.value.entries.filter(e => e.selected).length;
+        });
+
+        const selectAll = computed({
+            get: () => {
+                if (!parseResult.value || !parseResult.value.is_playlist || !parseResult.value.entries) return false;
+                return parseResult.value.entries.length > 0 && parseResult.value.entries.every(e => e.selected);
+            },
+            set: (value) => {
+                if (parseResult.value && parseResult.value.is_playlist && parseResult.value.entries) {
+                    parseResult.value.entries.forEach(e => {
+                        e.selected = value;
+                    });
+                }
+            }
+        });
+
         const startBatchDownload = async () => {
             if (!parseResult.value || !parseResult.value.is_playlist) return;
             
+            const selectedItems = parseResult.value.entries.filter(e => e.selected);
+            if (selectedItems.length === 0) return;
+
             try {
                 const res = await fetch('/api/download/batch', {
                     method: 'POST',
                     headers: getHeaders(),
                     body: JSON.stringify({
-                        items: parseResult.value.entries.map(e => ({ url: e.url, title: e.title })),
-                        is_audio_only: true // Always use audio only for playlists
+                        items: selectedItems.map(e => ({ url: e.url, title: e.title })),
+                        is_audio_only: batchDownloadFormat.value === 'audio'
                     })
                 });
 
@@ -405,7 +435,8 @@ createApp({
             ytdlpVersion, openSettings,
             cookieStatus, cookieFile, cookieMsg, cookieMsgSuccess, isUploadingCookie, cookieFileInput,
             handleCookieFileChange, uploadCookie,
-            batchDownloadMsg, batchDownloadSuccess, startBatchDownload
+            batchDownloadMsg, batchDownloadSuccess, startBatchDownload,
+            batchDownloadFormat, selectedCount, selectAll
         };
     }
 }).mount('#app');

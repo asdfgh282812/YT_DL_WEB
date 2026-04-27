@@ -208,18 +208,31 @@
                                     </div>
                                     <div class="flex-1 overflow-hidden">
                                         <h3 class="font-bold text-lg text-white truncate leading-tight pt-1" :title="parseResult.title">{{ parseResult.title }}</h3>
-                                        <p class="text-sm text-indigo-300 mt-1">共 {{ parseResult.item_count }} 首</p>
+
+                                        <div class="flex flex-wrap justify-between items-center mt-2 gap-3">
+                                            <label class="flex items-center gap-2 cursor-pointer group">
+                                                <input type="checkbox" v-model="selectAll" class="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 transition-colors cursor-pointer">
+                                                <span class="text-sm text-indigo-300 group-hover:text-indigo-200 transition-colors">全選 (共 {{ parseResult.item_count }} 首)</span>
+                                            </label>
+                                            <select v-model="batchDownloadFormat" class="glass-input rounded-lg px-2 py-1 text-sm cursor-pointer border border-white/20 bg-slate-800/80">
+                                                <option value="video" class="font-medium">🎬 最高畫質影片 (MP4)</option>
+                                                <option value="audio" class="font-medium">🎵 純音訊 (MP3)</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-4">
-                                    <div class="max-h-48 overflow-y-auto glass-input rounded-xl p-3 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-                                        <div v-for="(item, index) in parseResult.entries" :key="index" class="text-sm text-slate-300 truncate py-1 border-b border-white/5 last:border-0 hover:text-white transition-colors">
-                                            {{ index + 1 }}. {{ item.title }}
+                                    <div class="max-h-64 overflow-y-auto glass-input rounded-xl p-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+                                        <div v-for="(item, index) in parseResult.entries" :key="index"
+                                             @click="item.selected = !item.selected"
+                                             class="flex items-center gap-3 text-sm text-slate-300 truncate py-2 px-2 border-b border-white/5 last:border-0 hover:bg-white/5 rounded-lg transition-colors cursor-pointer">
+                                            <input type="checkbox" v-model="item.selected" @click.stop class="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 transition-colors cursor-pointer shrink-0">
+                                            <span class="truncate flex-1" :class="{'text-white': item.selected, 'text-slate-500': !item.selected}">{{ index + 1 }}. {{ item.title }}</span>
                                         </div>
                                     </div>
-                                    <button @click="startBatchDownload" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
+                                    <button @click="startBatchDownload" :disabled="selectedCount === 0" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:shadow-none text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2 transition-all">
                                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                        全部下載為 MP3
+                                        下載選取的 {{ selectedCount }} 首歌曲
                                     </button>
                                 </div>
                             </template>
