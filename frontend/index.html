@@ -118,6 +118,22 @@
         .list-move {
             transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
+        
+        .toast-slide-enter-active, .toast-slide-leave-active {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .toast-slide-enter-from, .toast-slide-leave-to {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        
+        .fade-slide-enter-active, .fade-slide-leave-active {
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .fade-slide-enter-from, .fade-slide-leave-to {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
 
         /* Interactive Buttons */
         .btn-interactive {
@@ -134,6 +150,22 @@
 <body class="min-h-screen text-slate-200 font-sans antialiased overflow-x-hidden">
     <div id="app" v-cloak class="min-h-screen flex flex-col p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto gap-6">
         
+        <!-- Global Toast Notification -->
+        <transition name="toast-slide">
+            <div v-if="toast.show" 
+                 class="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] px-6 py-3 rounded-full flex items-center gap-3 backdrop-blur-md shadow-2xl border transition-all"
+                 :class="toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400/50 text-white' : 'bg-rose-500/90 border-rose-400/50 text-white'">
+                
+                <svg v-if="toast.type === 'success'" class="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <svg v-else class="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                
+                <span class="font-medium whitespace-nowrap">{{ toast.message }}</span>
+                <button @click="toast.show = false" class="ml-2 hover:opacity-75 transition-opacity">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </transition>
+
         <!-- Auth Overlay -->
         <div v-if="!isAuthenticated" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div class="glass-panel p-8 rounded-2xl w-full max-w-sm border-t border-white/20">
@@ -206,18 +238,37 @@
                                     <div class="bg-white/10 p-3 rounded-xl shrink-0">
                                         <svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                                     </div>
-                                    <div class="flex-1 overflow-hidden">
+                                    <div class="flex-1 min-w-0">
                                         <h3 class="font-bold text-lg text-white truncate leading-tight pt-1" :title="parseResult.title">{{ parseResult.title }}</h3>
 
                                         <div class="flex flex-wrap justify-between items-center mt-2 gap-3">
-                                            <label class="flex items-center gap-2 cursor-pointer group">
-                                                <input type="checkbox" v-model="selectAll" class="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 transition-colors cursor-pointer">
+                                            <label class="flex items-center gap-2 cursor-pointer group relative">
+                                                <input type="checkbox" v-model="selectAll" class="peer hidden">
+                                                <div class="w-5 h-5 rounded flex items-center justify-center transition-all duration-300
+                                                            bg-white/5 border border-white/20
+                                                            peer-checked:bg-gradient-to-br peer-checked:from-indigo-500 peer-checked:to-purple-500 peer-checked:border-indigo-400/50 shadow-sm">
+                                                    <svg class="w-3.5 h-3.5 text-white opacity-0 scale-50 peer-checked:opacity-100 peer-checked:scale-110 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                                </div>
                                                 <span class="text-sm text-indigo-300 group-hover:text-indigo-200 transition-colors">全選 (共 {{ parseResult.item_count }} 首)</span>
                                             </label>
-                                            <select v-model="batchDownloadFormat" class="glass-input rounded-lg px-2 py-1 text-sm cursor-pointer border border-white/20 bg-slate-800/80">
-                                                <option value="video" class="font-medium">🎬 最高畫質影片 (MP4)</option>
-                                                <option value="audio" class="font-medium">🎵 純音訊 (MP3)</option>
-                                            </select>
+                                            <div class="relative">
+                                                <div @click="toggleBatchDropdown" class="glass-input rounded-lg px-3 py-1.5 text-sm cursor-pointer border border-white/20 bg-slate-800/80 hover:bg-slate-700/80 transition-colors flex items-center justify-between gap-2 min-w-[160px]">
+                                                    <span class="font-medium">{{ batchDownloadFormat === 'video' ? '🎬 最高畫質 (MP4)' : '🎵 純音訊 (MP3)' }}</span>
+                                                    <svg class="w-4 h-4 text-slate-400 transition-transform duration-300" :class="{ 'rotate-180': isBatchDropdownOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                                </div>
+                                                <transition name="fade-slide">
+                                                    <ul v-if="isBatchDropdownOpen" class="absolute z-50 right-0 mt-1.5 w-48 bg-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl py-1 overflow-hidden">
+                                                        <li @click="selectBatchFormat('video')" class="px-4 py-2 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2" :class="{ 'bg-white/5 text-indigo-300 font-medium': batchDownloadFormat === 'video' }">
+                                                            <span class="flex-1">🎬 最高畫質 (MP4)</span>
+                                                            <svg v-if="batchDownloadFormat === 'video'" class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                        </li>
+                                                        <li @click="selectBatchFormat('audio')" class="px-4 py-2 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2" :class="{ 'bg-white/5 text-indigo-300 font-medium': batchDownloadFormat === 'audio' }">
+                                                            <span class="flex-1">🎵 純音訊 (MP3)</span>
+                                                            <svg v-if="batchDownloadFormat === 'audio'" class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                        </li>
+                                                    </ul>
+                                                </transition>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -225,9 +276,16 @@
                                     <div class="max-h-64 overflow-y-auto glass-input rounded-xl p-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
                                         <div v-for="(item, index) in parseResult.entries" :key="index"
                                              @click="item.selected = !item.selected"
-                                             class="flex items-center gap-3 text-sm text-slate-300 truncate py-2 px-2 border-b border-white/5 last:border-0 hover:bg-white/5 rounded-lg transition-colors cursor-pointer">
-                                            <input type="checkbox" v-model="item.selected" @click.stop class="w-4 h-4 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 transition-colors cursor-pointer shrink-0">
-                                            <span class="truncate flex-1" :class="{'text-white': item.selected, 'text-slate-500': !item.selected}">{{ index + 1 }}. {{ item.title }}</span>
+                                             class="flex items-center gap-3 text-sm text-slate-300 truncate py-2 px-2 border-b border-white/5 last:border-0 hover:bg-white/5 rounded-lg transition-colors cursor-pointer group">
+                                            <label class="relative flex items-center shrink-0 cursor-pointer" @click.stop>
+                                                <input type="checkbox" v-model="item.selected" class="peer hidden">
+                                                <div class="w-4 h-4 rounded flex items-center justify-center transition-all duration-300
+                                                            bg-white/5 border border-white/20
+                                                            peer-checked:bg-gradient-to-br peer-checked:from-indigo-500 peer-checked:to-purple-500 peer-checked:border-indigo-400/50 shadow-sm">
+                                                    <svg class="w-3 h-3 text-white opacity-0 scale-50 peer-checked:opacity-100 peer-checked:scale-110 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                                </div>
+                                            </label>
+                                            <span class="truncate flex-1 transition-colors" :class="{'text-white font-medium': item.selected, 'text-slate-400 group-hover:text-slate-300': !item.selected}">{{ index + 1 }}. {{ item.title }}</span>
                                         </div>
                                     </div>
                                     <button @click="startBatchDownload" :disabled="selectedCount === 0" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:shadow-none text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2 transition-all">
@@ -245,16 +303,31 @@
                                 </div>
 
                                 <div class="flex flex-col gap-4">
-                                    <div class="flex-1">
+                                    <div class="flex-1 relative">
                                         <label class="block text-sm font-medium text-slate-400 mb-2">請選擇下載格式：</label>
-                                        <select v-model="selectedFormat" class="w-full glass-input rounded-xl p-3 transition-all cursor-pointer">
-                                            <option value="audio_only" class="font-medium text-indigo-300">🎵 純音訊 (MP3)</option>
-                                            <optgroup label="🎬 影片畫質 (MP4)">
-                                                <option v-for="fmt in parseResult.video_formats" :key="fmt.id" :value="fmt.id">
-                                                    {{ fmt.resolution }} ({{ fmt.ext }})
-                                                </option>
-                                            </optgroup>
-                                        </select>
+                                        <div @click="toggleFormatDropdown" class="w-full glass-input rounded-xl p-3 cursor-pointer hover:border-indigo-500/50 transition-all flex items-center justify-between gap-2 group">
+                                            <span class="font-medium text-slate-200 group-hover:text-white transition-colors">{{ getFormatText }}</span>
+                                            <svg class="w-5 h-5 text-slate-400 group-hover:text-indigo-400 transition-all duration-300" :class="{ 'rotate-180 text-indigo-400': isFormatDropdownOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                        </div>
+                                        
+                                        <transition name="fade-slide">
+                                            <ul v-if="isFormatDropdownOpen" class="absolute z-50 left-0 right-0 mt-2 bg-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl py-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                                <li @click="selectFormat('audio_only')" class="px-4 py-2.5 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2 border-b border-white/5 pb-3 mb-1" :class="{ 'bg-white/5 text-indigo-300 font-medium': selectedFormat === 'audio_only' }">
+                                                    <span class="flex-1">🎵 純音訊 (MP3)</span>
+                                                    <svg v-if="selectedFormat === 'audio_only'" class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                </li>
+                                                <li class="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider select-none">
+                                                    🎬 影片畫質 (MP4)
+                                                </li>
+                                                <li v-for="fmt in parseResult.video_formats" :key="fmt.id" 
+                                                    @click="selectFormat(fmt.id)" 
+                                                    class="px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2"
+                                                    :class="{ 'bg-white/5 text-indigo-300 font-medium': selectedFormat === fmt.id }">
+                                                    <span class="flex-1">{{ fmt.resolution }} ({{ fmt.ext }})</span>
+                                                    <svg v-if="selectedFormat === fmt.id" class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                </li>
+                                            </ul>
+                                        </transition>
                                     </div>
                                     <button @click="startDownload" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
                                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
@@ -412,8 +485,30 @@
             </transition>
 
         </template>
+            <transition name="slide-up">
+    <div v-if="confirmModal.show" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+        <div class="glass-panel p-8 rounded-2xl w-full max-w-sm border-t border-white/20 shadow-2xl text-center">
+            <div class="w-16 h-16 bg-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mx-auto mb-5">
+                <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">確認刪除？</h3>
+            <p class="text-slate-400 mb-8 leading-relaxed">{{ confirmModal.message }}</p>
+            <div class="flex gap-3">
+                <button @click="confirmModal.show = false" class="flex-1 px-5 py-3 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-800 btn-interactive font-medium">
+                    取消
+                </button>
+                <button @click="handleConfirm" class="flex-1 px-5 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white rounded-xl shadow-lg hover:shadow-[0_0_20px_rgba(225,29,72,0.4)] btn-interactive font-medium">
+                    確定刪除
+                </button>
+            </div>
+        </div>
+    </div>
+    </transition>
     </div>
 
     <script src="app.js"></script>
+
 </body>
 </html>

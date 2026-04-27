@@ -12,7 +12,28 @@ createApp({
         const parseResult = ref(null);
         const selectedFormat = ref('audio_only');
         const batchDownloadFormat = ref('video');
-
+        
+        // Toast System
+        const toast = ref({ show: false, message: '', type: 'success' });
+        let toastTimeout = null;
+        const showToast = (message, type = 'success') => {
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toast.value = { show: true, message, type };
+            toastTimeout = setTimeout(() => {
+                toast.value.show = false;
+            }, 3000);
+        };
+        // Confirm Modal System
+        const confirmModal = ref({ show: false, message: '', onConfirm: null });
+        const showConfirm = (message, callback) => {
+            confirmModal.value = { show: true, message, onConfirm: callback };
+        };
+        const handleConfirm = async () => {
+            if (confirmModal.value.onConfirm) {
+                await confirmModal.value.onConfirm();
+            }
+            confirmModal.value.show = false;
+        };
         const tasks = ref([]);
         const wsConnected = ref(false);
         let ws = null;
@@ -122,6 +143,7 @@ createApp({
 
         // Check local storage for token
         onMounted(() => {
+            document.addEventListener('click', closeDropdowns);
             const savedToken = localStorage.getItem('auth_token');
             if (savedToken) {
                 tokenInput.value = savedToken;
@@ -130,6 +152,7 @@ createApp({
         });
 
         onUnmounted(() => {
+            document.removeEventListener('click', closeDropdowns);
             if (ws) ws.close();
         });
 
@@ -241,7 +264,7 @@ createApp({
                     selectedFormat.value = parseResult.value.video_formats[0].id; // Default to best video
                 }
             } catch (e) {
-                alert(e.message);
+                showToast(e.message, 'error');
                 if (e.message.includes('登入')) logout();
             } finally {
                 isParsing.value = false;
@@ -295,17 +318,11 @@ createApp({
                 url.value = '';
                 parseResult.value = null;
                 
-                batchDownloadMsg.value = `成功加入 ${data.added_count} 筆下載任務`;
-                batchDownloadSuccess.value = true;
-                setTimeout(() => {
-                    batchDownloadMsg.value = '';
-                }, 3000);
+                // 統一使用新的精美 Toast 提示
+                showToast(`成功加入 ${data.added_count} 筆下載任務`, 'success');
             } catch (e) {
-                batchDownloadMsg.value = e.message;
-                batchDownloadSuccess.value = false;
-                setTimeout(() => {
-                    batchDownloadMsg.value = '';
-                }, 3000);
+                // 統一使用新的精美 Toast 提示
+                showToast(e.message || '批次加入下載失敗', 'error');
             }
         };
 
@@ -331,9 +348,10 @@ createApp({
                 
                 url.value = '';
                 parseResult.value = null;
+                showToast('已加入下載佇列', 'success');
 
             } catch (e) {
-                alert(e.message);
+                showToast(e.message, 'error');
             }
         };
 
@@ -349,16 +367,20 @@ createApp({
             document.body.removeChild(a);
         };
 
-        const deleteTask = async (taskId) => {
-            if (!confirm('確定要刪除這個任務與檔案嗎？')) return;
-            try {
-                await fetch(`/api/task/${taskId}`, {
-                    method: 'DELETE',
-                    headers: getHeaders()
-                });
-            } catch (e) {
-                console.error(e);
-            }
+        const deleteTask = (taskId) => {
+            showConfirm('確定要刪除這個任務與檔案嗎？此動作無法復原。', async () => {
+                try {
+                    const res = await fetch(`/api/task/${taskId}`, {
+                        method: 'DELETE',
+                        headers: getHeaders()
+                    });
+                    if (res.ok) {
+                        showToast('任務已成功刪除', 'success');
+                    }
+                } catch (e) {
+                    showToast('刪除失敗：' + e.message, 'error');
+                }
+            });
         };
 
         const saveSettings = async () => {
@@ -369,8 +391,9 @@ createApp({
                     body: JSON.stringify(tempConfig.value)
                 });
                 showSettings.value = false;
+                showToast('設定已成功儲存', 'success'); // 統一通知
             } catch (e) {
-                alert('儲存設定失敗');
+                showToast('儲存失敗', 'error');
             }
         };
 
@@ -388,13 +411,13 @@ createApp({
                 updateSuccess.value = true;
                 if (data.new_version) {
                     ytdlpVersion.value = data.new_version;
-                    updateMsg.value = `更新成功！已升級至版本: ${data.new_version}`;
+                    showToast(`更新成功！已升級至版本: ${data.new_version}`, 'success');
                 } else {
-                    updateMsg.value = '更新成功！';
+                    showToast('更新成功！', 'success');
                 }
             } catch (e) {
                 updateSuccess.value = false;
-                updateMsg.value = '更新失敗: ' + e.message;
+                showToast('更新失敗: ' + e.message, 'error');
             } finally {
                 isUpdating.value = false;
                 setTimeout(() => {
@@ -424,7 +447,46 @@ createApp({
                 default: return 'bg-slate-500';
             }
         };
+        // ==========================================
+        // 補上 AI 遺漏的 Dropdown 控制邏輯
+        // ==========================================
+        const isBatchDropdownOpen = ref(false);
+        const isFormatDropdownOpen = ref(false);
 
+        const closeDropdowns = () => {
+            isBatchDropdownOpen.value = false;
+            isFormatDropdownOpen.value = false;
+        };
+
+        const toggleBatchDropdown = (e) => {
+            if (e) e.stopPropagation();
+            isBatchDropdownOpen.value = !isBatchDropdownOpen.value;
+            isFormatDropdownOpen.value = false; // 開啟這個就關閉另一個
+        };
+
+        const toggleFormatDropdown = (e) => {
+            if (e) e.stopPropagation();
+            isFormatDropdownOpen.value = !isFormatDropdownOpen.value;
+            isBatchDropdownOpen.value = false;
+        };
+
+        const selectBatchFormat = (format) => {
+            batchDownloadFormat.value = format;
+            isBatchDropdownOpen.value = false;
+        };
+
+        const selectFormat = (formatId) => {
+            selectedFormat.value = formatId;
+            isFormatDropdownOpen.value = false;
+        };
+
+        const getFormatText = computed(() => {
+            if (selectedFormat.value === 'audio_only') return '🎵 純音訊 (MP3)';
+            if (!parseResult.value || !parseResult.value.video_formats) return '選擇格式';
+            const fmt = parseResult.value.video_formats.find(f => f.id === selectedFormat.value);
+            return fmt ? `🎬 ${fmt.resolution} (${fmt.ext})` : '選擇格式';
+        });
+        // ==========================================
         return {
             isAuthenticated, tokenInput, authError, login, logout,
             url, isParsing, parseUrl, parseResult, selectedFormat, startDownload,
@@ -436,7 +498,11 @@ createApp({
             cookieStatus, cookieFile, cookieMsg, cookieMsgSuccess, isUploadingCookie, cookieFileInput,
             handleCookieFileChange, uploadCookie,
             batchDownloadMsg, batchDownloadSuccess, startBatchDownload,
-            batchDownloadFormat, selectedCount, selectAll
+            batchDownloadFormat, selectedCount, selectAll,
+            toast, showToast,
+            isBatchDropdownOpen, isFormatDropdownOpen, toggleBatchDropdown, toggleFormatDropdown,
+            selectBatchFormat, selectFormat, getFormatText, closeDropdowns,
+            confirmModal, handleConfirm
         };
     }
 }).mount('#app');
