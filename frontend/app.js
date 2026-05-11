@@ -45,7 +45,28 @@ createApp({
         const updateMsg = ref('');
         const updateSuccess = ref(false);
         const ytdlpVersion = ref('讀取中...');
+        // ===== 新增：重啟倒數計時系統 =====
+        const isRestarting = ref(false);
+        const restartCountdown = ref(60);
+        let countdownTimer = null;
 
+        const forceReload = () => {
+            window.location.reload();
+        };
+
+        const startRestartCountdown = () => {
+            isRestarting.value = true;
+            showSettings.value = false; // 關閉設定視窗
+            restartCountdown.value = 60;
+            countdownTimer = setInterval(() => {
+                restartCountdown.value--;
+                if (restartCountdown.value <= 0) {
+                    clearInterval(countdownTimer);
+                    forceReload();
+                }
+            }, 1000);
+        };
+        // ==================================
         const cookieStatus = ref(false);
         const cookieFile = ref(null);
         const cookieMsg = ref('');
@@ -409,12 +430,15 @@ createApp({
                 if (!res.ok) throw new Error(data.detail || '更新失敗');
                 
                 updateSuccess.value = true;
-                if (data.new_version) {
-                    ytdlpVersion.value = data.new_version;
-                    showToast(`更新成功！已升級至版本: ${data.new_version}`, 'success');
+                // ===== 修改這裡：判斷是否需要倒數重啟 =====
+                if (data.require_restart) {
+                    showToast(data.new_version, 'success');
+                    startRestartCountdown(); // 呼叫倒數計時函式
                 } else {
-                    showToast('更新成功！', 'success');
+                    ytdlpVersion.value = data.new_version;
+                    showToast(data.new_version, 'success');
                 }
+                // ===========================================
             } catch (e) {
                 updateSuccess.value = false;
                 showToast('更新失敗: ' + e.message, 'error');
@@ -502,7 +526,7 @@ createApp({
             toast, showToast,
             isBatchDropdownOpen, isFormatDropdownOpen, toggleBatchDropdown, toggleFormatDropdown,
             selectBatchFormat, selectFormat, getFormatText, closeDropdowns,
-            confirmModal, handleConfirm
+            confirmModal, handleConfirm,isRestarting, restartCountdown, forceReload
         };
     }
 }).mount('#app');

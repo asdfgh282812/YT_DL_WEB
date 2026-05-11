@@ -574,25 +574,55 @@ async def upload_cookie(
         raise HTTPException(status_code=500, detail="儲存 Cookie 檔案時發生錯誤")
 
 @app.post("/api/update-ytdlp")
-async def update_ytdlp(authorization: Optional[str] = Header(None)):
+async def update_ytdlp(background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None)):
     verify_token(authorization)
     try:
         # 使用 sys.executable 確保使用目前環境的 pip
-        process = subprocess.Popen([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE
+        )
         stdout, stderr = process.communicate()
+        
         if process.returncode != 0:
              raise Exception(stderr.decode())
 
-        # 【核心邏輯】：重新載入 yt-dlp 模組
-        # 因為 Python 程式已經在執行，如果不 reload，系統還是會用舊版抓影片
-        import yt_dlp
-        importlib.reload(yt_dlp)
+        # 將終端機輸出的位元組解碼為字串
+        output_str = stdout.decode()
 
-        # 取得更新後的新版本號
-        new_version = getattr(yt_dlp.version, '__version__', '未知版本')
+        # 【核心邏輯】：判斷是否有真正下載並安裝新版本
+        # pip 如果有安裝新版本，輸出文字會包含 "Successfully installed"
+        if "Successfully installed" in output_str:
+            # 定義重啟伺服器的背景任務
+            def restart_server():
+                time.sleep(2)  # 等待 2 秒，讓 HTTP 成功回應可以確實傳送到前端
+                logger.info("yt-dlp updated, restarting server...")
+                os._exit(0)    # 強制結束 Python 行程，觸發 Docker 的 restart 機制
 
-        return {"success": True, "output": stdout.decode(), "new_version": new_version}
+            # 將重啟任務加入背景執行
+            background_tasks.add_task(restart_server)
+
+            return {
+                "success": True, 
+                "output": output_str, 
+                "new_version": "更新成功！即將重啟系統以套用新版...",
+                "require_restart": True   # <--- 新增這行：告訴前端需要重啟
+            }
+        else:
+            # 如果沒有 "Successfully installed"，通常代表 "Requirement already satisfied"
+            # 代表目前已經是最新版，不需要重啟系統
+            import yt_dlp
+            current_version = getattr(yt_dlp.version, '__version__', '未知版本')
+            return {
+                "success": True, 
+                "output": output_str, 
+                "new_version": f"已是最新版本 ({current_version})，系統無需重啟",
+                "require_restart": False  # <--- 新增這行：告訴前端不需要重啟
+            }
+            
     except Exception as e:
+        logger.error(f"Failed to update yt-dlp: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 # Mount frontend
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
