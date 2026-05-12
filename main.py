@@ -595,8 +595,8 @@ async def update_ytdlp(background_tasks: BackgroundTasks, authorization: Optiona
         # pip 如果有安裝新版本，輸出文字會包含 "Successfully installed"
         if "Successfully installed" in output_str:
             # 定義重啟伺服器的背景任務
-            def restart_server():
-                time.sleep(2)  # 等待 2 秒，讓 HTTP 成功回應可以確實傳送到前端
+            async def restart_server():
+                await asyncio.sleep(2)  # 等待 2 秒，讓 HTTP 成功回應可以確實傳送到前端
                 logger.info("yt-dlp updated, restarting server...")
                 os._exit(0)    # 強制結束 Python 行程，觸發 Docker 的 restart 機制
 
