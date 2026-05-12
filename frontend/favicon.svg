@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient (Slate to dark Blue/Purple hint) -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/> <!-- tailwind slate-800 -->
+      <stop offset="100%" stop-color="#0f172a"/> <!-- tailwind slate-900 -->
+    </linearGradient>
+
+    <!-- Icon Gradient (Indigo to Purple) -->
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/> <!-- tailwind indigo-500 -->
+      <stop offset="100%" stop-color="#a855f7"/> <!-- tailwind purple-500 -->
+    </linearGradient>
+
+    <!-- Glass Highlights / Shadows -->
+    <filter id="glassBlur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Base App Shape (Squircle) with glass effect border -->
+  <rect x="5" y="5" width="110" height="110" rx="28" fill="url(#bgGradient)" filter="url(#dropShadow)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+
+  <!-- Subtle Inner Glow for Glassmorphism -->
+  <rect x="6" y="6" width="108" height="108" rx="27" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+
+  <!-- Central Icon Group (Play + Download) -->
+  <g transform="translate(10, 10)">
+
+    <!-- Outer Circle framing the icon -->
+    <circle cx="50" cy="50" r="32" fill="none" stroke="url(#iconGradient)" stroke-width="6" stroke-linecap="round" opacity="0.2"/>
+
+    <!-- Play Button (Left part) -->
+    <path d="M 40,32 L 64,50 L 40,68 Z" fill="url(#iconGradient)" opacity="0.9" />
+
+    <!-- Download Arrow (Bottom right overlay) -->
+    <g transform="translate(56, 56)">
+      <!-- Circle backdrop for the arrow to separate from play button -->
+      <circle cx="12" cy="12" r="16" fill="#0f172a" />
+      <circle cx="12" cy="12" r="16" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+
+      <!-- Arrow drawing -->
+      <path d="M 12,4 L 12,18 M 6,12 L 12,18 L 18,12" fill="none" stroke="url(#iconGradient)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+
+  </g>
+</svg>
