@@ -578,12 +578,12 @@ async def update_ytdlp(background_tasks: BackgroundTasks, authorization: Optiona
     verify_token(authorization)
     try:
         # 使用 sys.executable 確保使用目前環境的 pip
-        process = subprocess.Popen(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = process.communicate()
+        stdout, stderr = await process.communicate()
         
         if process.returncode != 0:
              raise Exception(stderr.decode())
