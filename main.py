@@ -18,7 +18,12 @@ from pydantic import BaseModel
 import yt_dlp
 
 # --- Configuration ---
-AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "your_secure_password_here")
+AUTH_TOKEN = os.environ.get("AUTH_TOKEN")
+
+if not AUTH_TOKEN:
+    logging.error("錯誤：未設定 AUTH_TOKEN 環境變數，基於安全考量系統將終止執行，請在 .env 檔案或環境變數中設定。")
+    sys.exit(1)
+
 TEMP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "temp"))
 CONFIG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "config"))
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
