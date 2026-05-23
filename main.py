@@ -168,16 +168,6 @@ def get_common_ydl_opts() -> dict:
         opts['cookiefile'] = COOKIE_FILE
     return opts
 
-def yt_dlp_hook(d):
-    # This hook is called synchronously by yt-dlp, we need to carefully update state
-    # and we can't await in it directly. We'll queue updates if needed, or rely on 
-    # a separate loop to broadcast.
-    # To keep it simple, we update the task object directly. The broadcast loop handles sending.
-    
-    # We pass the task_id via the info_dict if possible, or just parse filename.
-    # A cleaner way is to keep a mapping of filename to task_id or pass a custom logger.
-    # We will handle updates directly in the download function using closures.
-    pass
 
 async def download_worker():
     global active_tasks
