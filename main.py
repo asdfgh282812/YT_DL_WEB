@@ -555,6 +555,10 @@ async def get_cookie_status(authorization: Optional[str] = Header(None)):
     exists = os.path.exists(COOKIE_FILE)
     return {"exists": exists}
 
+def write_cookie_file(content: bytes):
+    with open(COOKIE_FILE, "wb") as f:
+        f.write(content)
+
 @app.post("/api/upload-cookie")
 async def upload_cookie(
     file: UploadFile = File(...),
@@ -566,8 +570,8 @@ async def upload_cookie(
 
     try:
         content = await file.read()
-        with open(COOKIE_FILE, "wb") as f:
-            f.write(content)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, write_cookie_file, content)
         return {"success": True, "message": "Cookie 檔案上傳成功"}
     except Exception as e:
         logger.error(f"Failed to upload cookie: {e}")
