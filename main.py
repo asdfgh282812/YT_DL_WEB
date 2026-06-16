@@ -169,32 +169,52 @@ def get_common_ydl_opts() -> dict:
     return opts
 
 
+async def process_task(task_id: str):
+    global active_tasks
+    task = None
+    try:
+        task = tasks.get(task_id)
+        if not task:
+            return
+
+        task.state = TaskState.DOWNLOADING
+        await broadcast_state()
+
+        # Run download in a thread to not block event loop
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, perform_download, task)
+    except Exception as e:
+        logger.error(f"Task error for {task_id}: {e}")
+        if task:
+            task.state = TaskState.ERROR
+            task.error_msg = str(e)
+    finally:
+        active_tasks -= 1
+        task_queue.task_done()
+        await broadcast_state()
+
 async def download_worker():
     global active_tasks
     while True:
         try:
+            # Create tasks dynamically to avoid sleep polling
             # Wait for a task
             task_id = await task_queue.get()
+
+            # Use a fast check but then wait if too many are active
+            # We wait before claiming a "slot"
+            while active_tasks >= config_data.get("max_concurrent_downloads", 2):
+                await asyncio.sleep(0.5)
+
             task = tasks.get(task_id)
             if not task:
                 task_queue.task_done()
                 continue
 
-            # Check if we can start
-            while active_tasks >= config_data.get("max_concurrent_downloads", 2):
-                await asyncio.sleep(1)
-
             active_tasks += 1
-            task.state = TaskState.DOWNLOADING
-            await broadcast_state()
 
-            # Run download in a thread to not block event loop
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, perform_download, task)
-
-            active_tasks -= 1
-            task_queue.task_done()
-            await broadcast_state()
+            # Start task asynchronously
+            asyncio.create_task(process_task(task_id))
             
         except Exception as e:
             logger.error(f"Worker error: {e}")
