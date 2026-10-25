@@ -990,7 +990,7 @@
                                 <div class="actions-inline" style="padding:12px 16px 0">
                                     <button @click="openSites" class="btn btn-sm btn-tinted">cookies.txt 使用教學與匯入</button>
                                     <button @click="testCookies" class="btn btn-sm btn-gray">測試已儲存的來源</button>
-                                    <button v-if="cookieStatus" @click="deleteCookies" class="btn btn-sm btn-danger">刪除上傳檔案</button>
+                                    <button v-if="cookieStatus" @click="deleteCookies" class="btn btn-sm btn-danger">刪除所有網站 cookies</button>
                                 </div>
                                 <transition name="result">
                                     <p v-if="cookieMsg" class="callout" :class="cookieMsgSuccess ? '' : 'callout-error'" :style="cookieMsgSuccess ? 'background:var(--tint-green);color:var(--green);margin-top:12px' : 'margin-top:12px'">{{ cookieMsg }}</p>
@@ -1129,21 +1129,33 @@
                                     <ol style="margin:12px 0 0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px;font-size:14.5px;line-height:1.55;color:var(--label-2)">
                                         <li>在電腦的 Chrome 開啟上方連結，按「加到 Chrome」，安裝擴充套件。</li>
                                         <li>開啟要下載的網站（例如 YouTube），登入自己的帳號，確認影片可以播放。</li>
-                                        <li>保持在該網站分頁，點 Chrome 右上角的擴充功能圖示，開啟 Get cookies.txt LOCALLY。將 Export Format 設為 <strong style="color:var(--label)">Netscape</strong>，按 <strong style="color:var(--label)">Export</strong> 或 Export As，儲存 .txt 檔案。</li>
-                                        <li>回到這裡選取檔案，按「匯入個人 cookies」。成功後關閉此視窗，重新按「解析網址」，或在失敗任務按「重試」。</li>
+                                        <li>開啟 Get cookies.txt LOCALLY，將 Export Format 設為 <strong style="color:var(--label)">Netscape</strong>。只匯出目前網站可按 <strong style="color:var(--label)">Export</strong> 或 Export As；要一次匯出所有網站則按 <strong style="color:var(--label)">Export All Cookies</strong>，儲存 .txt 檔案。</li>
+                                        <li>回到這裡選擇匯入範圍與檔案，再按「匯入個人 cookies」。成功後重新按「解析網址」，或在失敗任務按「重試」。</li>
                                     </ol>
-                                    <p class="caption" style="margin-top:12px">只需匯出要下載網站的 cookies；請選 Netscape 格式，檔案上限 2 MB。登入失效時，重新登入網站、匯出並匯入即可。</p>
+                                    <p class="caption" style="margin-top:12px">檔案上限 2 MB。一次匯入所有網站會分開保存；之後只更新某個網站，也不影響其他網站。登入失效時，重新登入網站、匯出並匯入即可。</p>
                                 </div>
                             </section>
 
                             <section class="sheet-section">
                                 <h3>匯入 cookies.txt</h3>
                                 <div class="group group-surface" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+                                    <label class="field">
+                                        <span>匯入範圍</span>
+                                        <select v-model="cookieImportScope" :disabled="isUploadingCookie" class="input" aria-describedby="cookie-scope-help">
+                                            <option value="all">檔案內所有網站</option>
+                                            <option value="site">只匯入指定網站</option>
+                                        </select>
+                                    </label>
+                                    <label v-if="cookieImportScope === 'site'" class="field">
+                                        <span>網站網址或網域</span>
+                                        <input v-model="cookieWebsite" :disabled="isUploadingCookie" type="text" inputmode="url" maxlength="8192" autocapitalize="none" spellcheck="false" placeholder="例如 youtube.com" class="input" aria-describedby="cookie-scope-help">
+                                    </label>
+                                    <p id="cookie-scope-help" class="caption">{{ cookieImportScope === 'site' ? '只更新指定網站；即使檔案還有其他網站的 cookies，也不會匯入那些資料。' : '自動辨識並更新檔案包含的網站；檔案未包含的網站會保留。' }}</p>
                                     <input type="file" accept=".txt" ref="cookieFileInput" @change="handleCookieFileChange" aria-label="個人 cookies 檔案">
-                                    <div><button @click="uploadCookie" :disabled="isUploadingCookie || !cookieFile" class="btn btn-sm btn-primary"><span v-if="isUploadingCookie" class="spinner"></span>{{ isUploadingCookie ? '匯入中…' : '匯入個人 cookies' }}</button></div>
+                                    <div><button @click="uploadCookie" :disabled="isUploadingCookie || !cookieFile || (cookieImportScope === 'site' && !cookieWebsite.trim())" class="btn btn-sm btn-primary"><span v-if="isUploadingCookie" class="spinner"></span>{{ isUploadingCookie ? '匯入中…' : '匯入個人 cookies' }}</button></div>
                                     <p v-if="cookieMsg" role="status" class="caption" style="font-size:14px;word-break:break-word" :style="{ color: cookieMsgSuccess ? 'var(--green)' : 'var(--red)' }">{{ cookieMsg }}</p>
                                 </div>
-                                <p class="caption">新檔案會取代上一份個人匯入檔案。cookies 包含登入憑證，請妥善保管並只上傳至你信任的下載工具。</p>
+                                <p class="caption">同一網站重新匯入會取代該網站的 cookies；其他網站與其他使用者不受影響。cookies 包含登入憑證，請只上傳至你信任的下載工具。</p>
                             </section>
 
                             <section class="sheet-section">

@@ -30,15 +30,15 @@ FastAPI + Vue + yt-dlp 的媒體下載介面，支援獨立使用者、每日下
 
 1. 在電腦 Chrome 安裝 [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)，按「加到 Chrome」。
 2. 在本機開啟目標網站（例如 YouTube），登入自己的帳號，確認影片可以播放。
-3. 保持在目標網站分頁，從 Chrome 右上角的擴充功能圖示開啟 Get cookies.txt LOCALLY。將 **Export Format** 設為 **Netscape**，按 **Export** 或 **Export As**，儲存 `.txt` 檔案。
-4. 回到下載工具，開啟「Cookies 設定」，選取檔案並按「匯入個人 cookies」。只接受 Netscape 格式，檔案上限 **2 MB**。
+3. 保持在目標網站分頁，從 Chrome 右上角的擴充功能圖示開啟 Get cookies.txt LOCALLY。將 **Export Format** 設為 **Netscape**。只匯出目前網站可按 **Export** 或 **Export As**；一次匯出所有網站則按 **Export All Cookies**，儲存 `.txt` 檔案。
+4. 回到下載工具，開啟「Cookies 設定」，選擇「檔案內所有網站」或「只匯入指定網站」，選取檔案後按「匯入個人 cookies」。指定網站時可填網址或網域，例如 `youtube.com`。只接受 Netscape 格式，檔案上限 **2 MB**。
 5. 匯入成功後，關閉設定視窗，重新按「解析網址」；已失敗的任務則按「重試」。
 
-只需匯出要下載網站的 cookies。新檔案會取代上一份個人匯入檔案。cookies 包含登入憑證，請妥善保管，只上傳至信任的下載工具，不要提交到 GitHub。登入失效時，重新登入網站、匯出並匯入；成功讀取檔案不代表網站一定接受該登入狀態。
+「檔案內所有網站」會自動分組，只更新檔案包含的網站；「只匯入指定網站」只取用對應網站的 cookies，即使檔案包含其他網站也會略過。每個網站可各別移除。同一網站重新匯入會取代該網站的 cookies，其他網站與其他使用者不受影響。若檔案沒有指定網站，整次匯入會拒絕且保留所有既有資料。cookies 包含登入憑證，請妥善保管，只上傳至信任的下載工具，不要提交到 GitHub。登入失效時，重新登入網站、匯出並匯入；成功讀取檔案不代表網站一定接受該登入狀態。
 
-個人 cookies 由 `SESSION_SECRET` 衍生的金鑰加密保存，僅供該帳號解析與下載，不由 API 傳回原始值。舊版已保存的個人網站 cookies 仍可使用及移除；同一網站有多份資料時，採適用且較新的資料。
+個人 cookies 由 `SESSION_SECRET` 衍生的金鑰加密保存，僅供該帳號解析與下載，不由 API 傳回原始值。舊版整份個人匯入資料會在讀取或匯入時自動拆成網站資料，同一網站有較新的既有資料時優先保留；此遷移不需要重新上傳。網站分組支援常見服務別名及網域／子網域，送出請求時仍遵守 cookies 原本的網域、路徑與安全限制。
 
-舊版 `config/cookies.txt`／執行主機的瀏覽器來源只供既有系統管理者使用，不能供其他帳號取用。移除系統管理者的個人匯入資料時，也會移除舊 cookies.txt，避免刪除後繼續套用。讀取執行主機瀏覽器來源需自行提供可存取的瀏覽器設定檔，容器不再內建瀏覽器。
+舊版 `config/cookies.txt`／執行主機的瀏覽器來源只供既有系統管理者使用，不能供其他帳號取用。系統管理者使用「刪除所有網站 cookies」時，也會移除舊 cookies.txt，避免刪除後繼續套用。讀取執行主機瀏覽器來源需自行提供可存取的瀏覽器設定檔，容器不再內建瀏覽器。
 
 擴充套件介面參考：[原作者程式碼](https://github.com/kairi003/Get-cookies.txt-LOCALLY/blob/master/src/popup.html)。來源網站的 IP、登入狀態或授權限制仍可能造成下載失敗。
 

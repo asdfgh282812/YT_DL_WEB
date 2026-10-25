@@ -98,6 +98,8 @@ createApp({
         const cookieStatus = ref(false);
         const systemStatus = ref({});
         const cookieFile = ref(null);
+        const cookieImportScope = ref('all');
+        const cookieWebsite = ref('');
         const cookieMsg = ref('');
         const cookieMsgSuccess = ref(false);
         const isUploadingCookie = ref(false);
@@ -126,12 +128,19 @@ createApp({
 
         const uploadCookie = async () => {
             if (!cookieFile.value) return;
+            if (cookieImportScope.value === 'site' && !cookieWebsite.value.trim()) {
+                cookieMsgSuccess.value = false;
+                cookieMsg.value = '請輸入要匯入的網站網址或網域';
+                return;
+            }
 
             isUploadingCookie.value = true;
             cookieMsg.value = '';
 
             const formData = new FormData();
             formData.append('file', cookieFile.value);
+            formData.append('scope', cookieImportScope.value);
+            formData.append('website', cookieImportScope.value === 'site' ? cookieWebsite.value.trim() : '');
 
             try {
                 const res = await fetch('/api/upload-cookie', {
@@ -145,7 +154,7 @@ createApp({
                 const data = await res.json();
 
                 if (!res.ok) {
-                    throw new Error(data.detail || '上傳失敗');
+                    throw new Error(apiError(data, '上傳失敗'));
                 }
 
                 cookieMsgSuccess.value = true;
@@ -167,10 +176,6 @@ createApp({
             } finally {
                 isUploadingCookie.value = false;
 
-                // Hide message after 3 seconds
-                setTimeout(() => {
-                    cookieMsg.value = '';
-                }, 3000);
             }
         };
 
@@ -541,11 +546,12 @@ createApp({
                 cookieMsg.value = data.message;
             } catch (error) { cookieMsgSuccess.value = false; cookieMsg.value = error.message; }
         };
-        const deleteCookies = () => showConfirm('確定刪除已上傳的 cookies？', async () => {
+        const deleteCookies = () => showConfirm('確定刪除自己所有網站的 cookies？', async () => {
             const res = await fetch('/api/cookies', { method: 'DELETE', headers: getHeaders() });
             if (!res.ok) { showToast('刪除 cookies 失敗', 'error'); return; }
             await fetchCookieStatus();
-            showToast('已刪除上傳的 cookies');
+            await fetchSites();
+            showToast('已刪除自己的所有網站 cookies');
         });
         const retryTask = async (task) => {
             try {
@@ -607,10 +613,13 @@ createApp({
             showSites.value = true;
             cookieMsg.value = '';
             cookieFile.value = null;
+            cookieImportScope.value = 'all';
+            try { cookieWebsite.value = new URL(url.value).hostname; }
+            catch { cookieWebsite.value = ''; }
             await fetchSites();
             await fetchCookieStatus();
         };
-        const forgetSite = (site) => showConfirm(`移除 ${site.name} 的 cookies？`, async () => {
+        const forgetSite = (site) => showConfirm(`移除 ${site.name} 的 cookies？其他網站的資料會保留。`, async () => {
             try {
                 await api(`/api/sites/${encodeURIComponent(site.site_key)}`, { method: 'DELETE' });
                 await fetchSites();
@@ -788,7 +797,7 @@ createApp({
             isUpdating, updateMsg, updateSuccess, updateYtDlp,
             getStatusText, getProgressBarClass,
             ytdlpVersion, openSettings,
-            cookieStatus, cookieFile, cookieMsg, cookieMsgSuccess, isUploadingCookie, cookieFileInput,
+            cookieStatus, cookieFile, cookieImportScope, cookieWebsite, cookieMsg, cookieMsgSuccess, isUploadingCookie, cookieFileInput,
             handleCookieFileChange, uploadCookie,
             batchDownloadMsg, batchDownloadSuccess, startBatchDownload,
             batchDownloadFormat, selectedCount, selectAll,

@@ -14,6 +14,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet, InvalidToken
+from cookie_scopes import group_cookies
 
 ADMIN_ID = 'bootstrap-admin'
 
@@ -282,7 +283,44 @@ class UserStore:
             db.execute('INSERT INTO site_accounts VALUES (?,?,?,?,?,?,?) ON CONFLICT(user_id,site_key) DO UPDATE SET name=excluded.name,origin=excluded.origin,cookies=excluded.cookies,user_agent=excluded.user_agent,updated_at=excluded.updated_at',
                        (user_id, site_key, name, origin, payload, user_agent, time.time()))
 
+    def _migrate_cookie_sites(self, db, user_id):
+        legacy = db.execute('SELECT * FROM site_accounts WHERE user_id=? AND site_key=?', (user_id, '*')).fetchone()
+        if not legacy:
+            return
+        try:
+            groups = group_cookies(json.loads(self.cipher.decrypt(legacy['cookies'])))
+        except (InvalidToken, ValueError, KeyError, TypeError):
+            return  # Keep unreadable legacy data available for explicit removal/re-import.
+        for key, site in groups.items():
+            payload = self.cipher.encrypt(json.dumps(site['cookies']).encode())
+            db.execute('''INSERT INTO site_accounts VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT(user_id,site_key) DO UPDATE SET name=excluded.name, origin=excluded.origin,
+                cookies=excluded.cookies, user_agent=excluded.user_agent, updated_at=excluded.updated_at
+                WHERE excluded.updated_at > site_accounts.updated_at''',
+                (user_id, key, site['name'], '', payload, legacy['user_agent'], legacy['updated_at']))
+        db.execute('DELETE FROM site_accounts WHERE user_id=? AND site_key=?', (user_id, '*'))
+
+    def migrate_cookie_sites(self, user_id):
+        with self.connection() as db:
+            exists = db.execute('SELECT 1 FROM site_accounts WHERE user_id=? AND site_key=?', (user_id, '*')).fetchone()
+        if exists:
+            with self.connection(write=True) as db:
+                self._migrate_cookie_sites(db, user_id)
+
+    def import_cookie_sites(self, user_id, groups):
+        with self.connection(write=True) as db:
+            self._migrate_cookie_sites(db, user_id)
+            updated_at = time.time()
+            for key, site in groups.items():
+                payload = self.cipher.encrypt(json.dumps(site['cookies']).encode())
+                db.execute('''INSERT INTO site_accounts VALUES (?,?,?,?,?,?,?)
+                    ON CONFLICT(user_id,site_key) DO UPDATE SET name=excluded.name, origin=excluded.origin,
+                    cookies=excluded.cookies, user_agent=excluded.user_agent, updated_at=excluded.updated_at''',
+                    (user_id, key, site['name'], '', payload, '', updated_at))
+
     def site(self, user_id, site_key):
+        if site_key != '*':
+            self.migrate_cookie_sites(user_id)
         with self.connection() as db:
             row = db.execute('SELECT * FROM site_accounts WHERE user_id=? AND site_key=?', (user_id, site_key)).fetchone()
         if not row:
@@ -295,9 +333,16 @@ class UserStore:
         return data
 
     def list_sites(self, user_id):
+        self.migrate_cookie_sites(user_id)
         with self.connection() as db:
             return [dict(row) for row in db.execute('SELECT site_key,name,origin,updated_at FROM site_accounts WHERE user_id=? ORDER BY name', (user_id,))]
 
     def delete_site(self, user_id, site_key):
+        if site_key != '*':
+            self.migrate_cookie_sites(user_id)
         with self.connection(write=True) as db:
             db.execute('DELETE FROM site_accounts WHERE user_id=? AND site_key=?', (user_id, site_key))
+
+    def delete_all_sites(self, user_id):
+        with self.connection(write=True) as db:
+            db.execute('DELETE FROM site_accounts WHERE user_id=?', (user_id,))

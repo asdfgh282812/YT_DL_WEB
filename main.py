@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field, field_validator, model_validator
@@ -23,6 +23,8 @@ import yt_dlp
 from user_store import ADMIN_ID, QuotaExceeded, StoreError
 from accounts import install_account_routes
 from site_cookies import install_site_routes, site_for_url, needs_login, domain_matches
+from cookie_scopes import import_cookie_groups
+from typing import Literal
 from archives import install_archive_routes
 
 # --- Configuration ---
@@ -319,15 +321,23 @@ class ParseRequest(SourceOptions):
 
 def private_media(user_id, url, options):
     site = site_for_url(url)
-    specific = auth.store.site(user_id, site['key'])
-    imported = auth.store.site(user_id, '*')
     hosts = (urlsplit(url).hostname, *site['domains'])
+    profiles = auth.store.list_sites(user_id)
+    candidates = [auth.store.site(user_id, profile['site_key']) for profile in profiles
+                  if profile['site_key'] == site['key'] or any(domain_matches(host, profile['site_key']) for host in hosts)]
+    candidates = [record for record in candidates if record]
+    imported = auth.store.site(user_id, '*') if not candidates else None
     if imported and not any(domain_matches(host, cookie['domain'].lstrip('.')) for host in hosts for cookie in imported['cookies']):
         imported = None
-    candidates = [record for record in (specific, imported) if record]
+    if imported:
+        candidates.append(imported)
     record = max(candidates, key=lambda record: record['updated_at']) if candidates else None
     owner = auth.store.get_user(user_id)
-    cookies = record['cookies'] if record else None if owner and user_id == ADMIN_ID else []
+    merged = {}
+    for candidate in sorted(candidates, key=lambda candidate: candidate['updated_at']):
+        for cookie in candidate['cookies']:
+            merged[(cookie['domain'], cookie.get('path', '/'), cookie['name'])] = cookie
+    cookies = list(merged.values()) if candidates else None if owner and user_id == ADMIN_ID else []
     options = dict(options)
     if record and record['user_agent']:
         options['http_headers'] = {"User-Agent": record['user_agent'], **options.get('http_headers', {})}
@@ -537,7 +547,7 @@ async def get_version():
 
 @app.get("/api/cookie-status")
 async def get_cookie_status(request: Request):
-    own = auth.store.site(request.state.user['id'], '*')
+    own = auth.store.list_sites(request.state.user['id'])
     admin = request.state.user['id'] == ADMIN_ID
     return {"exists": bool(own) or (admin and os.path.isfile(COOKIE_FILE)),
             "source": config_data["cookie_source"] if admin else 'personal',
@@ -549,9 +559,11 @@ async def get_cookie_status(request: Request):
 async def test_cookies(request: Request):
     user = request.state.user
     def check():
-        own = auth.store.site(user['id'], '*')
+        sites = auth.store.list_sites(user['id'])
+        own = [auth.store.site(user['id'], site['site_key']) for site in sites]
         if own:
-            return {"success": True, "count": len(own['cookies']), "message": f"已讀取個人匯入檔案的 {len(own['cookies'])} 筆 cookies；實際登入狀態須以網站下載驗證"}
+            count = sum(len(site['cookies']) for site in own)
+            return {"success": True, "count": count, "site_count": len(own), "message": f"已讀取 {len(own)} 個網站的 {count} 筆 cookies；實際登入狀態須以網站下載驗證"}
         if user['id'] != ADMIN_ID:
             raise ValueError("尚未匯入個人 cookies，請從「Cookies 設定」依教學匯入 cookies.txt")
         if config_data["cookie_source"] == "none":
@@ -570,13 +582,14 @@ async def test_cookies(request: Request):
 
 @app.delete("/api/cookies")
 async def delete_cookies(request: Request):
-    auth.store.delete_site(request.state.user['id'], '*')
+    auth.store.delete_all_sites(request.state.user['id'])
     if request.state.user['id'] == ADMIN_ID:
         Path(COOKIE_FILE).unlink(missing_ok=True)
-    return {"success": True, "message": "已刪除個人匯入的 cookies"}
+    return {"success": True, "message": "已刪除自己的所有網站 cookies"}
 
 @app.post("/api/upload-cookie")
-async def upload_cookie(request: Request, file: UploadFile = File(...)):
+async def upload_cookie(request: Request, file: UploadFile = File(...),
+                        scope: Literal['all', 'site'] = Form('all'), website: str = Form('', max_length=8192)):
     if not (file.filename or "").lower().endswith(".txt"):
         raise HTTPException(400, "請上傳 Netscape 格式的 .txt 檔案")
     content = await file.read(2 * 1024 * 1024 + 1)
@@ -595,12 +608,18 @@ async def upload_cookie(request: Request, file: UploadFile = File(...)):
         cookies = [{"name": cookie.name, "value": cookie.value, "domain": cookie.domain, "path": cookie.path,
                     "expires": cookie.expires if cookie.expires else -1, "secure": cookie.secure,
                     "httpOnly": cookie.has_nonstandard_attr('HttpOnly'), "sameSite": "Lax"} for cookie in jar]
-        auth.store.save_site(request.state.user['id'], '*', '個人匯入檔案', '', cookies)
-        return {"success": True, "message": f"已儲存 {count} 筆個人 cookies，之後解析與下載自動套用"}
+        groups = import_cookie_groups(cookies, scope, website)
+        count = sum(len(site['cookies']) for site in groups.values())
+        auth.store.import_cookie_sites(request.state.user['id'], groups)
+        sites = [{'site_key': key, 'name': site['name']} for key, site in groups.items()]
+        return {"success": True, "count": count, "site_count": len(sites), "sites": sites,
+                "message": f"已匯入 {len(sites)} 個網站、{count} 筆 cookies；其他網站的資料已保留"}
     except LoadError:
         raise HTTPException(400, "無效的 Cookie 檔案，請使用 Netscape cookies.txt 格式")
     except OSError:
         raise HTTPException(500, "無法儲存 cookies，請檢查儲存空間")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     except Exception:
         raise HTTPException(400, "無效的 Cookie 檔案，請使用 Netscape cookies.txt 格式")
     finally:

@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certi
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py media.py authentication.py user_store.py accounts.py archives.py site_cookies.py ./
+COPY main.py media.py authentication.py user_store.py accounts.py archives.py site_cookies.py cookie_scopes.py ./
 COPY frontend ./frontend
 RUN mkdir -p /app/config /app/temp
 EXPOSE 8000

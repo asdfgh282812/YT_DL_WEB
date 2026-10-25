@@ -18,6 +18,15 @@
         ],
         "createdAt": "2026-10-25T19:45:44.513Z",
         "reason": "Agent: sweep only runs on the PROCESSING bar, which is full-width with no measurable progress, so the motion is the indeterminate-activity signal; downloading bars show real progress by width."
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "/Users/andy/YT_DL_WEB/frontend/index.html"
+        ],
+        "createdAt": "2026-10-25T21:13:23.279Z",
+        "reason": "Codex reviewed .bar-fill.f-PROCESSING::after: only a task-progress highlight animates, no text or content scrolls, and reduced-motion disables it. Same reviewed exception as the synchronized implementation."
       }
     ]
   }

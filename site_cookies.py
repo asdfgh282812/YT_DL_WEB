@@ -1,42 +1,10 @@
-"""Website matching and private, user-owned cookie records."""
+"""Private, user-owned website cookie management routes."""
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from fastapi import Request
-from publicsuffix2 import get_sld
 
-from media import http_url
+from cookie_scopes import site_for_url, needs_login, domain_matches
 from user_store import ADMIN_ID
-
-
-PROVIDERS = (
-    {'key': 'youtube', 'name': 'YouTube', 'domains': ('youtube.com', 'youtu.be', 'googlevideo.com')},
-    {'key': 'bilibili', 'name': 'Bilibili', 'domains': ('bilibili.com', 'b23.tv')},
-    {'key': 'instagram', 'name': 'Instagram', 'domains': ('instagram.com',)},
-    {'key': 'facebook', 'name': 'Facebook', 'domains': ('facebook.com', 'fb.watch')},
-    {'key': 'x', 'name': 'X', 'domains': ('x.com', 'twitter.com', 't.co')},
-    {'key': 'tiktok', 'name': 'TikTok', 'domains': ('tiktok.com',)},
-    {'key': 'vimeo', 'name': 'Vimeo', 'domains': ('vimeo.com',)},
-    {'key': 'twitch', 'name': 'Twitch', 'domains': ('twitch.tv',)},
-)
-
-
-def domain_matches(host, domain):
-    return host == domain or host.endswith('.' + domain)
-
-
-def site_for_url(url):
-    host = urlsplit(http_url(url)).hostname.encode('idna').decode().lower()
-    for provider in PROVIDERS:
-        if any(domain_matches(host, domain) for domain in provider['domains']):
-            return dict(provider)
-    root = get_sld(host, strict=True) or host
-    return {'key': root, 'name': root, 'domains': (root,)}
-
-
-def needs_login(message):
-    lowered = message.lower()
-    return any(word in lowered for word in ('sign in', 'log in', 'login', 'cookies', '403', '401', 'age-restricted', 'members-only', 'private video', '登入'))
 
 
 def install_site_routes(app, auth, legacy_cookie_file=None):

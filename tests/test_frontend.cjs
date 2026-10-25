@@ -134,3 +134,37 @@ test('late session check cannot log out a newer login', async () => {
     assert.equal(app.isAuthenticated.value, true);
     assert.equal(app.authError.value, '');
 });
+
+for (const scope of ['all', 'site']) {
+    test(`cookie import sends ${scope} scope and refreshes the saved site list`, async () => {
+        let submitted;
+        const app = appWithFetch(async (path, options) => {
+            if (path === '/api/upload-cookie') submitted = options.body;
+            const data = path === '/api/sites' ? { sites: [{ site_key: 'youtube', name: 'YouTube' }] }
+                : path === '/api/cookie-status' ? { exists: true }
+                : { success: true, message: '已匯入 1 個網站；其他網站的資料已保留' };
+            return { ok: true, json: async () => data };
+        });
+        app.cookieFile.value = new Blob(['test-cookies']);
+        app.cookieImportScope.value = scope;
+        app.cookieWebsite.value = ' youtube.com ';
+        await app.uploadCookie();
+        assert.equal(submitted.get('scope'), scope);
+        assert.equal(submitted.get('website'), scope === 'site' ? 'youtube.com' : '');
+        assert.equal(app.cookieFile.value, null);
+        assert.equal(app.siteAccounts.value[0].site_key, 'youtube');
+        assert.equal(app.cookieStatus.value, true);
+        assert.equal(app.cookieMsgSuccess.value, true);
+    });
+}
+
+test('single-site import requires a target before uploading any credentials', async () => {
+    let requested = false;
+    const app = appWithFetch(async () => { requested = true; });
+    app.cookieFile.value = new Blob(['test-cookies']);
+    app.cookieImportScope.value = 'site';
+    await app.uploadCookie();
+    assert.equal(requested, false);
+    assert.equal(app.cookieMsgSuccess.value, false);
+    assert.match(app.cookieMsg.value, /網站網址或網域/);
+});

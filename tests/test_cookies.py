@@ -16,7 +16,7 @@ def test_cookie_upload_validation_snapshot_and_delete():
         assert bad.status_code == 400
         response = client.post('/api/upload-cookie', headers=HEADERS, files={'file': ('cookies.txt', COOKIE)})
         assert response.status_code == 200
-        assert main.auth.store.site('bootstrap-admin', '*')['cookies'][0]['value'] == 'test-value'
+        assert main.auth.store.site('bootstrap-admin', 'example.com')['cookies'][0]['value'] == 'test-value'
         assert not Path(main.COOKIE_FILE).exists()  # New personal imports stay encrypted.
         Path(main.COOKIE_FILE).write_text(COOKIE)  # Exercise the legacy snapshot reader separately.
         original = Path(main.COOKIE_FILE).read_bytes()

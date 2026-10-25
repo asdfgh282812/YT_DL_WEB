@@ -82,10 +82,10 @@ def test_imported_cookies_download_protected_media_and_remain_private(cookie_vid
         assert client.get('/api/download/' + task_id).status_code == 404
         assert client.post('/api/parse', json={'url': cookie_video}).status_code == 400
         # Removing Bob's import does not remove Alice's record.
-        assert client.delete('/api/sites/*').status_code == 200
-        assert main.auth.store.site(alice['id'], '*')
+        assert client.delete('/api/sites/127.0.0.1').status_code == 200
+        assert main.auth.store.site(alice['id'], '127.0.0.1')
         login(client, 'alice')
-        assert client.delete('/api/sites/*').status_code == 200
+        assert client.delete('/api/sites/127.0.0.1').status_code == 200
         assert client.post('/api/parse', json={'url': cookie_video}).status_code == 400
 
 
