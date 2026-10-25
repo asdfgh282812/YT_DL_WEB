@@ -648,5 +648,14 @@ install_account_routes(app, auth, broadcast_state)
 install_site_routes(app, auth, lambda: COOKIE_FILE)
 install_archive_routes(app, lambda: tasks)
 
+class FrontendFiles(StaticFiles):
+    """Serve the UI with revalidation so a page and its script never come from different releases."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Mount frontend
-app.mount("/", StaticFiles(directory=str(Path(__file__).parent / "frontend"), html=True), name="frontend")
+app.mount("/", FrontendFiles(directory=str(Path(__file__).parent / "frontend"), html=True), name="frontend")
