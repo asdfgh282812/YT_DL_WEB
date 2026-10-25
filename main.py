@@ -4,26 +4,28 @@ import logging
 import os
 import shutil
 import subprocess
-import time
 import uuid
-import sys          # <--- 新增這行
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, Request, BackgroundTasks, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, UploadFile, File, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import Field, field_validator, model_validator
+from authentication import Authentication
+from media import Settings, SourceOptions, http_url, youtube_dl, describe_media, download_options, validate_cookie_file, probe_unknown_stream
 import yt_dlp
+from user_store import ADMIN_ID, QuotaExceeded, StoreError
+from accounts import install_account_routes
+from site_cookies import install_site_routes, site_for_url, needs_login, domain_matches
+from archives import install_archive_routes
 
 # --- Configuration ---
-AUTH_TOKEN = os.environ.get("AUTH_TOKEN")
-
-if not AUTH_TOKEN:
-    logging.error("錯誤：未設定 AUTH_TOKEN 環境變數，基於安全考量系統將終止執行，請在 .env 檔案或環境變數中設定。")
-    sys.exit(1)
-
 TEMP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "temp"))
 CONFIG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "config"))
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -35,15 +37,29 @@ os.makedirs(CONFIG_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app):
+    global task_queue, scheduler_wake, download_executor, active_tasks
+    task_queue = asyncio.Queue()
+    scheduler_wake = asyncio.Event()
+    download_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="download")
+    active_tasks = 0
+    auth.store.release_orphaned()
+    backgrounds = [asyncio.create_task(fn()) for fn in (download_worker, periodic_broadcaster, cleanup_task)]
+    try:
+        yield
+    finally:
+        for job in backgrounds:
+            job.cancel()
+        await asyncio.gather(*backgrounds, return_exceptions=True)
+        if running_downloads:
+            await asyncio.gather(*running_downloads, return_exceptions=True)
+        download_executor.shutdown(wait=True)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(lifespan=lifespan)
+
+auth = Authentication(CONFIG_DIR)
+auth.install(app)
 
 # --- State Management ---
 class TaskState:
@@ -54,7 +70,11 @@ class TaskState:
     ERROR = "ERROR"
 
 class DownloadTask:
-    def __init__(self, task_id: str, url: str, format_id: str, is_audio_only: bool, title: str):
+    def __init__(self, task_id: str, url: str, format_id: str, is_audio_only: bool, title: str, output_format="mp4", source_options=None, owner_id=ADMIN_ID):
+        self.owner_id = owner_id
+        self.login_required = False
+        self.output_format = output_format
+        self.source_options = source_options or SourceOptions()
         self.task_id = task_id
         self.url = url
         self.format_id = format_id
@@ -79,215 +99,194 @@ class DownloadTask:
             "speed": self.speed,
             "eta": self.eta,
             "is_audio_only": self.is_audio_only,
+            "output_format": self.output_format,
+            "login_required": self.login_required,
             "error_msg": self.error_msg
         }
 
 tasks: Dict[str, DownloadTask] = {}
 task_queue = asyncio.Queue()
 active_tasks = 0
+scheduler_wake = asyncio.Event()
+running_downloads = set()
+download_executor = None
 active_websockets: List[WebSocket] = []
+update_in_progress = False
 
 # --- Config Management ---
 def load_config():
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
+                return Settings(**json.load(f)).model_dump()
         except Exception as e:
             logger.error(f"Error loading config: {e}")
-    return {"max_concurrent_downloads": 2}
+    return Settings().model_dump()
 
 def save_config(config):
     try:
-        with open(CONFIG_FILE, "w") as f:
+        temporary = CONFIG_FILE + ".tmp"
+        with open(temporary, "w") as f:
             json.dump(config, f, indent=2)
+        os.replace(temporary, CONFIG_FILE)
     except Exception as e:
         logger.error(f"Error saving config: {e}")
+        raise HTTPException(500, "設定無法寫入磁碟")
 
 config_data = load_config()
 
-# --- Auth Dependency ---
-def verify_token(authorization: Optional[str] = Header(None)):
-    if not authorization or authorization != f"Bearer {AUTH_TOKEN}":
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
 # --- WebSocket ---
+def user_config(user):
+    if user['role'] == 'admin':
+        return dict(config_data)
+    return {key: config_data[key] for key in ('max_concurrent_downloads', 'concurrent_fragments')}
+
 async def broadcast_state():
-    state = {
-        "tasks": [task.to_dict() for task in tasks.values()],
-        "config": config_data
-    }
-    message = json.dumps({"type": "state_update", "data": state})
-    for ws in active_websockets:
+    for ws in list(active_websockets):
         try:
-            await ws.send_text(message)
+            user = auth.current_user(ws, getattr(ws.state, "legacy_token", ""))
+            if not user:
+                await ws.close(code=1008)
+                active_websockets.remove(ws)
+                continue
+            own = [task for task in list(tasks.values()) if task.owner_id == user['id']]
+            state = {
+                "tasks": [task.to_dict() for task in own], "config": user_config(user), "user": user,
+                "quota": auth.store.quota(user['id']),
+                "active_downloads": sum(task.state in (TaskState.DOWNLOADING, TaskState.PROCESSING) for task in own),
+                "queued_downloads": sum(task.state == TaskState.QUEUED for task in own),
+            }
+            await asyncio.wait_for(ws.send_text(json.dumps({"type": "state_update", "data": state})), timeout=2)
         except Exception:
-            pass
+            if ws in active_websockets:
+                active_websockets.remove(ws)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    
-    # Simple auth for WS
-    auth_msg = await websocket.receive_text()
-    try:
-        auth_data = json.loads(auth_msg)
-        if auth_data.get("token") != AUTH_TOKEN:
-            await websocket.close(code=1008)
-            return
-    except Exception:
+    if not auth.origin_allowed(websocket):
         await websocket.close(code=1008)
         return
-
-    active_websockets.append(websocket)
+    await websocket.accept()
     try:
+        data = json.loads(await asyncio.wait_for(websocket.receive_text(), timeout=10))
+        if not isinstance(data, dict):
+            await websocket.close(code=1008)
+            return
+        if not auth.session_user(websocket):
+            if not auth.token_valid(data.get("token", "")):
+                await websocket.close(code=1008)
+                return
+            websocket.state.legacy_token = data["token"]
+        active_websockets.append(websocket)
         await broadcast_state()
         while True:
             await websocket.receive_text()
-    except WebSocketDisconnect:
-        active_websockets.remove(websocket)
+    except (WebSocketDisconnect, asyncio.TimeoutError, ValueError):
+        pass
+    finally:
+        if websocket in active_websockets:
+            active_websockets.remove(websocket)
 
 # --- Task Worker ---
-class MyLogger(object):
-    def debug(self, msg):
-        pass
-    def warning(self, msg):
-        pass
-    def error(self, msg):
-        logger.error(msg)
-
-def get_common_ydl_opts() -> dict:
-    opts = {
-        'logger': MyLogger(),
-        'quiet': True,
-        'no_warnings': True,
-        'nocheckcertificate': True, 'legacyserverconnect': True, 'no_check_certificates': True,
-        'extractor_args': {'youtube': ['player_client=ios,tv,web']}
-    }
-    if os.path.exists(COOKIE_FILE):
-        opts['cookiefile'] = COOKIE_FILE
-    return opts
-
+async def run_download(task):
+    global active_tasks
+    try:
+        await asyncio.get_running_loop().run_in_executor(download_executor, perform_download, task)
+    except Exception as exc:
+        task.state = TaskState.ERROR
+        task.error_msg = str(exc)
+    finally:
+        try:
+            auth.store.settle(task.task_id, task.state == TaskState.COMPLETED)
+        except Exception:
+            logger.exception("Failed to settle quota for %s", task.task_id)
+        active_tasks -= 1
+        task.last_accessed = datetime.now()
+        task_queue.task_done()
+        scheduler_wake.set()
+        await broadcast_state()
 
 async def download_worker():
+    """Dispatch jobs without awaiting each download; re-read the limit on every dispatch."""
     global active_tasks
     while True:
-        try:
-            # Wait for a task
-            task_id = await task_queue.get()
-            task = tasks.get(task_id)
-            if not task:
-                task_queue.task_done()
-                continue
-
-            # Check if we can start
-            while active_tasks >= config_data.get("max_concurrent_downloads", 2):
-                await asyncio.sleep(1)
-
-            active_tasks += 1
-            task.state = TaskState.DOWNLOADING
-            await broadcast_state()
-
-            # Run download in a thread to not block event loop
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, perform_download, task)
-
-            active_tasks -= 1
+        task_id = await task_queue.get()
+        while active_tasks >= config_data["max_concurrent_downloads"]:
+            scheduler_wake.clear()
+            await scheduler_wake.wait()
+        task = tasks.get(task_id)
+        if not task or task.state != TaskState.QUEUED:
             task_queue.task_done()
-            await broadcast_state()
-            
-        except Exception as e:
-            logger.error(f"Worker error: {e}")
-            await asyncio.sleep(1)
+            continue
+        owner = auth.store.get_user(task.owner_id)
+        if not owner or owner['disabled']:
+            task.state = TaskState.ERROR
+            task.error_msg = '帳號已停用，下載已停止並歸還預留額度'
+            auth.store.settle(task_id, False)
+            task_queue.task_done()
+            continue
+        active_tasks += 1
+        task.state = TaskState.DOWNLOADING
+        job = asyncio.create_task(run_download(task))
+        running_downloads.add(job)
+        job.add_done_callback(running_downloads.discard)
+        await broadcast_state()
 
 def perform_download(task: DownloadTask):
     try:
-        outtmpl = os.path.join(TEMP_DIR, f"{task.task_id}.%(ext)s")
-        
-        ydl_opts = get_common_ydl_opts()
-        ydl_opts.update({
-            'outtmpl': outtmpl,
+        if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+            raise RuntimeError("缺少 FFmpeg/ffprobe，請先安裝以處理串流、合併音軌與驗證影片")
+        folder = Path(TEMP_DIR) / task.task_id
+        folder.mkdir(exist_ok=True)
+        finished_paths = []
+        options = download_options(task.format_id, task.is_audio_only, task.output_format)
+        options.update({
+            "outtmpl": str(folder / "media.%(ext)s"), "noplaylist": True,
+            "http_headers": task.source_options.headers(),
+            "post_hooks": [finished_paths.append],
         })
-
-        if task.is_audio_only:
-            ydl_opts.update({
-                'format': task.format_id if task.format_id else 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-            })
-            final_ext = "mp3"
-        else:
-            # Video: format_id + bestaudio, convert to mp4
-            format_str = f"{task.format_id}+bestaudio/bestvideo+bestaudio/best/best" if task.format_id else 'bestvideo+bestaudio/best/best'
-            ydl_opts.update({
-                'format': format_str,
-                'merge_output_format': 'mp4',
-            })
-            final_ext = "mp4"
-
-        # Progress hook
-        def progress_hook(d):
-            if d['status'] == 'downloading':
+        def progress_hook(data):
+            if data["status"] == "downloading":
                 task.state = TaskState.DOWNLOADING
-                
-                # Calculate progress
-                downloaded = d.get('downloaded_bytes', 0)
-                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-                if total > 0:
-                    task.progress = round((downloaded / total) * 100, 2)
-                
-                # Speed
-                speed = d.get('speed', 0)
-                if speed:
-                    task.speed = f"{speed / 1024 / 1024:.2f} MB/s"
-                
-                # ETA
-                eta = d.get('eta', 0)
-                if eta is not None:
-                    task.eta = f"{eta}s"
-                    
-            elif d['status'] == 'finished':
+                total = data.get("total_bytes") or data.get("total_bytes_estimate")
+                if total:
+                    task.progress = min(99.9, round(data.get("downloaded_bytes", 0) / total * 100, 2))
+                speed = data.get("speed")
+                task.speed = f"{speed / 1024 / 1024:.2f} MB/s" if speed else ""
+                eta = data.get("eta")
+                task.eta = f"{eta}s" if eta is not None else ""
+            elif data["status"] == "finished":
                 task.state = TaskState.PROCESSING
-                task.progress = 100.0
                 task.speed = ""
-                task.eta = "Processing..."
-                
-            # Broadcast state (since we are in a thread, use threadsafe queue or just let background loop do it)
-            # We'll rely on the periodic broadcaster to pick up these changes
-
-        ydl_opts['progress_hooks'] = [progress_hook]
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([task.url])
-
-        # Find the output file
-        expected_file = os.path.join(TEMP_DIR, f"{task.task_id}.{final_ext}")
-        
-        # Sometime yt-dlp might output .mkv temporarily before merge, but since we set merge_output_format
-        # it should end up as .mp4. For audio it extracts to .mp3.
-        # Let's verify file exists
-        if os.path.exists(expected_file):
-            task.file_path = expected_file
-            task.state = TaskState.COMPLETED
-        else:
-            # Try to find any file starting with task_id
-            found = False
-            for f in os.listdir(TEMP_DIR):
-                if f.startswith(task.task_id):
-                    task.file_path = os.path.join(TEMP_DIR, f)
-                    task.state = TaskState.COMPLETED
-                    found = True
-                    break
-            if not found:
-                raise Exception("Output file not found after download.")
-
-    except Exception as e:
-        logger.error(f"Download failed for {task.task_id}: {e}")
+                task.eta = "合併與驗證中"
+        options["progress_hooks"] = [progress_hook]
+        with private_media(task.owner_id, task.url, options) as ydl:
+            info = ydl.extract_info(task.url, download=True)
+        # post_hooks run only after all postprocessors and moves have succeeded.
+        if not finished_paths:
+            raise RuntimeError("下載沒有產生完成檔案，請確認來源不是空的播放清單")
+        output = Path(finished_paths[-1]).resolve()
+        if output.parent != folder.resolve() or not output.is_file() or output.stat().st_size == 0:
+            raise RuntimeError("找不到已完成的輸出檔案")
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "json", str(output)], capture_output=True, text=True, timeout=30)
+        if probe.returncode:
+            raise RuntimeError("輸出媒體驗證失敗，下載可能不完整")
+        stream_types = {stream.get("codec_type") for stream in json.loads(probe.stdout).get("streams", [])}
+        required = "audio" if task.is_audio_only else "video"
+        if required not in stream_types:
+            raise RuntimeError("來源只提供音軌，請改用含影片的 m3u8 主播放清單" if required == "video" else "來源沒有可用音軌")
+        task.file_path = str(output)
+        task.progress = 100.0
+        task.speed = task.eta = ""
+        task.state = TaskState.COMPLETED
+        if task.title in ("", "未命名媒體"):
+            task.title = info.get("title") or task.title
+    except Exception as exc:
+        logger.error("Download failed for %s: %s", task.task_id, exc)
         task.state = TaskState.ERROR
-        task.error_msg = str(e)
+        task.error_msg = str(exc)
+        task.login_required = needs_login(task.error_msg)
+        task.speed = task.eta = ""
 
 # Periodic broadcast task
 async def periodic_broadcaster():
@@ -298,182 +297,157 @@ async def periodic_broadcaster():
 # Background Cleanup Task
 async def cleanup_task():
     while True:
-        try:
-            now = datetime.now()
-            cutoff_time = now - timedelta(hours=2)
-            
-            # Clean tasks memory
-            tasks_to_delete = []
-            for task_id, task in tasks.items():
-                if task.last_accessed < cutoff_time:
-                    tasks_to_delete.append(task_id)
-            
-            for task_id in tasks_to_delete:
-                del tasks[task_id]
-                
-            # Clean files in temp dir
-            for filename in os.listdir(TEMP_DIR):
-                filepath = os.path.join(TEMP_DIR, filename)
-                if os.path.isfile(filepath):
-                    file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
-                    if file_mtime < cutoff_time:
-                        try:
-                            os.remove(filepath)
-                            logger.info(f"Cleaned up old file: {filepath}")
-                        except Exception as e:
-                            logger.error(f"Error removing {filepath}: {e}")
-                            
-            if tasks_to_delete:
-                await broadcast_state()
-                
-        except Exception as e:
-            logger.error(f"Cleanup error: {e}")
-            
-        await asyncio.sleep(600) # Run every 10 mins
+        cutoff = datetime.now() - timedelta(hours=2)
+        for task_id, task in list(tasks.items()):
+            if task.state in (TaskState.COMPLETED, TaskState.ERROR) and task.last_accessed < cutoff and not getattr(task, 'archive_readers', 0):
+                shutil.rmtree(Path(TEMP_DIR) / task_id, ignore_errors=True)
+                tasks.pop(task_id, None)
+        # Never remove files belonging to queued or running tasks.
+        live_ids = set(tasks)
+        for path in Path(TEMP_DIR).iterdir():
+            if path.name in live_ids or datetime.fromtimestamp(path.stat().st_mtime) >= cutoff:
+                continue
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            elif path.is_file() and not any(path.name.startswith(task_id) for task_id in live_ids):
+                path.unlink(missing_ok=True)
+        await asyncio.sleep(600)
 
-# --- Startup Events ---
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(download_worker())
-    asyncio.create_task(periodic_broadcaster())
-    asyncio.create_task(cleanup_task())
-
-# --- API Endpoints ---
-class ParseRequest(BaseModel):
+class ParseRequest(SourceOptions):
     url: str
+    _valid_url = field_validator("url")(http_url)
+
+def private_media(user_id, url, options):
+    site = site_for_url(url)
+    specific = auth.store.site(user_id, site['key'])
+    imported = auth.store.site(user_id, '*')
+    hosts = (urlsplit(url).hostname, *site['domains'])
+    if imported and not any(domain_matches(host, cookie['domain'].lstrip('.')) for host in hosts for cookie in imported['cookies']):
+        imported = None
+    candidates = [record for record in (specific, imported) if record]
+    record = max(candidates, key=lambda record: record['updated_at']) if candidates else None
+    owner = auth.store.get_user(user_id)
+    cookies = record['cookies'] if record else None if owner and user_id == ADMIN_ID else []
+    options = dict(options)
+    if record and record['user_agent']:
+        options['http_headers'] = {"User-Agent": record['user_agent'], **options.get('http_headers', {})}
+    return youtube_dl(dict(config_data), COOKIE_FILE, options, cookies=cookies)
+
+def extract_media(req, user_id=ADMIN_ID):
+    options = {"extract_flat": "in_playlist", "http_headers": req.headers()}
+    with private_media(user_id, req.url, options) as ydl:
+        info = ydl.extract_info(req.url, download=False)
+        if info:
+            probe_unknown_stream(info, ydl)
+    if not info:
+        raise ValueError("找不到可下載的媒體")
+    return describe_media(info)
 
 @app.post("/api/parse")
-async def parse_url(req: ParseRequest, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+async def parse_url(req: ParseRequest, request: Request):
     try:
-        ydl_opts = get_common_ydl_opts()
-        ydl_opts.update({
-            # 在最後面補上 bestaudio，讓純音樂也能順利過關
-            'format': 'bestvideo+bestaudio/best/bestaudio/best',
-            'extract_flat': 'in_playlist'
-        })
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(req.url, download=False)
-            
-        title = info.get('title', 'Unknown Title')
-        
-        # Handle playlist
-        if 'entries' in info:
-            entries = []
-            for entry in info['entries']:
-                if entry is None:
-                    continue
-                entry_title = entry.get('title', '')
-                if not entry_title or entry_title in ['[Deleted video]', '[Private video]']:
-                    continue
-                entry_url = entry.get('url') or entry.get('id')
-                if not entry_url:
-                    continue
-                    
-                # Fix url if it is just an id
-                if not entry_url.startswith('http'):
-                    entry_url = f"https://www.youtube.com/watch?v={entry_url}"
-                    
-                entries.append({
-                    "title": entry_title,
-                    "url": entry_url
-                })
-                
-            return {
-                "is_playlist": True,
-                "title": title,
-                "item_count": len(entries),
-                "entries": entries
-            }
-        
-        # Handle single video
-        formats = info.get('formats', [])
-        
-        # Filter formats
-        video_formats = []
-        for f in formats:
-            # We want formats that have video. yt-dlp usually separates them.
-            if f.get('vcodec') != 'none':
-                height = f.get('height')
-                ext = f.get('ext')
-                format_id = f.get('format_id')
-                format_note = f.get('format_note', '')
-                if height:
-                    video_formats.append({
-                        "id": format_id,
-                        "resolution": f"{height}p",
-                        "note": format_note,
-                        "ext": ext
-                    })
-        
-        # Deduplicate and sort by height
-        unique_videos = {}
-        for f in video_formats:
-            res = f['resolution']
-            if res not in unique_videos:
-                unique_videos[res] = f
-            else:
-                # prefer mp4
-                if f['ext'] == 'mp4' and unique_videos[res]['ext'] != 'mp4':
-                    unique_videos[res] = f
-                    
-        sorted_videos = sorted(unique_videos.values(), key=lambda x: int(x['resolution'].replace('p', '')), reverse=True)
+        return await asyncio.to_thread(extract_media, req, request.state.user['id'])
+    except Exception as exc:
+        site = site_for_url(req.url)['name']
+        required = needs_login(str(exc))
+        message = f'來源拒絕存取，可先登入 {site} 後重試，並確認影片能在該網站播放。' if required else str(exc)
+        return JSONResponse(status_code=400, content={"detail": message, "login_required": required, "site": site})
 
-        return {
-            "is_playlist": False,
-            "title": title,
-            "video_formats": sorted_videos
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def own_task(task_id, user_id):
+    task = tasks.get(task_id)
+    if not task or task.owner_id != user_id:
+        raise HTTPException(404, "找不到任務")
+    return task
 
-class DownloadRequest(BaseModel):
+def reserve_quota(user_id, task_ids):
+    try:
+        auth.store.reserve(user_id, task_ids)
+    except QuotaExceeded as exc:
+        raise HTTPException(429, str(exc))
+    except StoreError as exc:
+        raise HTTPException(403, str(exc))
+
+class DownloadRequest(ParseRequest):
     url: str
-    format_id: str
-    is_audio_only: bool
-    title: str
+    format_id: str = ""
+    is_audio_only: bool = False
+    title: str = Field(default="未命名媒體", max_length=500)
+    output_format: str = "mp4"
 
-class BatchDownloadItem(BaseModel):
+    @model_validator(mode="after")
+    def match_output(self):
+        if self.is_audio_only and self.output_format in ("mp4", "mkv", "original"):
+            self.output_format = "mp3"  # Compatibility with older API clients.
+        elif not self.is_audio_only and self.output_format in ("mp3", "m4a"):
+            raise ValueError("影片模式請選 MP4、MKV 或原始容器")
+        return self
+
+    @field_validator("output_format")
+    @classmethod
+    def valid_output(cls, value):
+        if value not in ("mp4", "mkv", "original", "mp3", "m4a"):
+            raise ValueError("不支援此輸出格式")
+        return value
+
+    @field_validator("format_id")
+    @classmethod
+    def valid_format(cls, value):
+        if value and value != "best" and not all(c.isalnum() or c in "-_." for c in value):
+            raise ValueError("請選擇解析結果中的單一格式")
+        return value
+
+class BatchDownloadItem(ParseRequest):
     url: str
     title: str
 
-class BatchDownloadRequest(BaseModel):
-    items: list[BatchDownloadItem]
-    is_audio_only: bool
+class BatchDownloadRequest(SourceOptions):
+    items: list[BatchDownloadItem] = Field(min_length=1, max_length=200)
+    is_audio_only: bool = False
+    output_format: str = "mp4"
+    _valid_output = field_validator("output_format")(DownloadRequest.valid_output.__func__)
+    _match_output = model_validator(mode="after")(DownloadRequest.match_output)
 
 @app.post("/api/download")
-async def add_download(req: DownloadRequest, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+async def add_download(req: DownloadRequest, request: Request):
+    if update_in_progress:
+        raise HTTPException(409, "系統更新中，請完成後再加入下載")
     task_id = str(uuid.uuid4())
-    
+    reserve_quota(request.state.user['id'], [task_id])
     task = DownloadTask(
         task_id=task_id,
         url=req.url,
         format_id=req.format_id,
         is_audio_only=req.is_audio_only,
-        title=req.title
+        title=req.title,
+        output_format=req.output_format,
+        source_options=SourceOptions(referer=req.referer, user_agent=req.user_agent),
+        owner_id=request.state.user['id']
     )
     
     tasks[task_id] = task
     await task_queue.put(task_id)
     await broadcast_state()
     
-    return {"task_id": task_id}
+    return {"task_id": task_id, "quota": auth.store.quota(request.state.user['id'])}
 
 @app.post("/api/download/batch")
-async def add_batch_download(req: BatchDownloadRequest, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+async def add_batch_download(req: BatchDownloadRequest, request: Request):
+    if update_in_progress:
+        raise HTTPException(409, "系統更新中，請完成後再加入下載")
     
+    task_ids = [str(uuid.uuid4()) for _ in req.items]
+    reserve_quota(request.state.user['id'], task_ids)
     count = 0
-    for item in req.items:
-        task_id = str(uuid.uuid4())
+    for item, task_id in zip(req.items, task_ids):
         task = DownloadTask(
             task_id=task_id,
             url=item.url,
             format_id="", # Empty format id for audio_only which is default for batch
             is_audio_only=req.is_audio_only,
-            title=item.title
+            title=item.title,
+            output_format=req.output_format,
+            source_options=SourceOptions(referer=req.referer, user_agent=req.user_agent),
+            owner_id=request.state.user['id']
         )
         tasks[task_id] = task
         await task_queue.put(task_id)
@@ -485,12 +459,10 @@ async def add_batch_download(req: BatchDownloadRequest, authorization: Optional[
     return {"added_count": count}
 
 @app.get("/api/download/{task_id}")
-async def get_download_file(task_id: str, token: str):
-    if token != AUTH_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+async def get_download_file(task_id: str, request: Request):
         
-    task = tasks.get(task_id)
-    if not task or task.state != TaskState.COMPLETED or not task.file_path:
+    task = own_task(task_id, request.state.user['id'])
+    if task.state != TaskState.COMPLETED or not task.file_path or not Path(task.file_path).is_file():
         raise HTTPException(status_code=404, detail="File not ready or found")
         
     task.last_accessed = datetime.now()
@@ -508,10 +480,14 @@ async def get_download_file(task_id: str, token: str):
     )
 
 @app.delete("/api/task/{task_id}")
-async def delete_task(task_id: str, background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
-    task = tasks.get(task_id)
+async def delete_task(task_id: str, background_tasks: BackgroundTasks, request: Request):
+    task = own_task(task_id, request.state.user["id"])
     if task:
+        if getattr(task, 'archive_readers', 0):
+            raise HTTPException(409, "此檔案正在打包下載，請完成後再刪除")
+        if task.state in (TaskState.DOWNLOADING, TaskState.PROCESSING):
+            raise HTTPException(409, "下載仍在進行，完成後才能刪除")
+        background_tasks.add_task(shutil.rmtree, str(Path(TEMP_DIR) / task_id), True)
         if task.file_path and os.path.exists(task.file_path):
             def remove_file(path):
                 try:
@@ -519,108 +495,158 @@ async def delete_task(task_id: str, background_tasks: BackgroundTasks, authoriza
                 except Exception as e:
                     logger.error(f"Failed to remove {path}: {e}")
             background_tasks.add_task(remove_file, task.file_path)
+        if task.state == TaskState.QUEUED:
+            auth.store.settle(task_id, False)
         del tasks[task_id]
         await broadcast_state()
     return {"success": True}
 
-class ConfigRequest(BaseModel):
-    max_concurrent_downloads: int
-
-@app.post("/api/config")
-async def update_config(req: ConfigRequest, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
-    global config_data
-    config_data["max_concurrent_downloads"] = req.max_concurrent_downloads
-    save_config(config_data)
+@app.post("/api/task/{task_id}/retry")
+async def retry_task(task_id: str, request: Request):
+    if update_in_progress:
+        raise HTTPException(409, "系統更新中，請完成後再重試")
+    task = own_task(task_id, request.state.user['id'])
+    if task.state != TaskState.ERROR:
+        raise HTTPException(409, "僅能重試失敗任務")
+    reserve_quota(request.state.user['id'], [task_id])
+    task.state = TaskState.QUEUED
+    task.login_required = False
+    task.error_msg = task.speed = task.eta = ""
+    task.progress = 0
+    task.last_accessed = datetime.now()
+    await task_queue.put(task_id)
     await broadcast_state()
     return {"success": True}
 
+@app.post("/api/config")
+async def update_config(req: Settings):
+    updated = req.model_dump()
+    save_config(updated)
+    config_data.clear()
+    config_data.update(updated)
+    scheduler_wake.set()
+    await broadcast_state()
+    return {"success": True, "config": config_data}
+
 @app.get("/api/version")
-async def get_version(authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+async def get_version():
     import yt_dlp
     # 取得目前載入記憶體中的 yt-dlp 版本
     version = getattr(yt_dlp.version, '__version__', '未知版本')
     return {"version": version}
 
 @app.get("/api/cookie-status")
-async def get_cookie_status(authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
-    exists = os.path.exists(COOKIE_FILE)
-    return {"exists": exists}
+async def get_cookie_status(request: Request):
+    own = auth.store.site(request.state.user['id'], '*')
+    admin = request.state.user['id'] == ADMIN_ID
+    return {"exists": bool(own) or (admin and os.path.isfile(COOKIE_FILE)),
+            "source": config_data["cookie_source"] if admin else 'personal',
+            "browser": config_data["cookie_browser"] if admin else '',
+            "ffmpeg_available": bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
+            "sso_enabled": auth.oidc_enabled}
 
-def write_cookie_file(content: bytes):
-    with open(COOKIE_FILE, "wb") as f:
-        f.write(content)
+@app.post("/api/cookies/test")
+async def test_cookies(request: Request):
+    user = request.state.user
+    def check():
+        own = auth.store.site(user['id'], '*')
+        if own:
+            return {"success": True, "count": len(own['cookies']), "message": f"已讀取個人匯入檔案的 {len(own['cookies'])} 筆 cookies；實際登入狀態須以網站下載驗證"}
+        if user['id'] != ADMIN_ID:
+            raise ValueError("尚未匯入個人 cookies，請從「Cookies 設定」依教學匯入 cookies.txt")
+        if config_data["cookie_source"] == "none":
+            return {"success": True, "count": 0, "message": "已停用伺服器 cookies；個人匯入的 cookies 仍會自動套用"}
+        if config_data["cookie_source"] == "file" and not os.path.isfile(COOKIE_FILE):
+            raise ValueError("尚未上傳 cookies 檔案")
+        with youtube_dl(dict(config_data), COOKIE_FILE) as ydl:
+            count = len(ydl.cookiejar)
+            if not count:
+                raise ValueError("來源未提供任何 cookie，請先在選定的瀏覽器登入")
+            return {"success": True, "count": count, "message": f"成功讀取 {count} 筆 cookie；實際登入狀態仍須以目標網站下載驗證"}
+    try:
+        return await asyncio.to_thread(check)
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+
+@app.delete("/api/cookies")
+async def delete_cookies(request: Request):
+    auth.store.delete_site(request.state.user['id'], '*')
+    if request.state.user['id'] == ADMIN_ID:
+        Path(COOKIE_FILE).unlink(missing_ok=True)
+    return {"success": True, "message": "已刪除個人匯入的 cookies"}
 
 @app.post("/api/upload-cookie")
-async def upload_cookie(
-    file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None)
-):
-    verify_token(authorization)
-    if not file.filename.endswith(".txt"):
-        raise HTTPException(status_code=400, detail="Only .txt files are allowed")
-
+async def upload_cookie(request: Request, file: UploadFile = File(...)):
+    if not (file.filename or "").lower().endswith(".txt"):
+        raise HTTPException(400, "請上傳 Netscape 格式的 .txt 檔案")
+    content = await file.read(2 * 1024 * 1024 + 1)
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(400, "Cookie 檔案上限為 2 MB")
+    import tempfile
+    from http.cookiejar import LoadError
+    from yt_dlp.cookies import YoutubeDLCookieJar
+    fd, path = tempfile.mkstemp(dir=CONFIG_DIR, suffix=".txt")
     try:
-        content = await file.read()
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, write_cookie_file, content)
-        return {"success": True, "message": "Cookie 檔案上傳成功"}
-    except Exception as e:
-        logger.error(f"Failed to upload cookie: {e}")
-        raise HTTPException(status_code=500, detail="儲存 Cookie 檔案時發生錯誤")
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+        count = validate_cookie_file(path)
+        jar = YoutubeDLCookieJar(path)
+        jar.load(ignore_discard=True, ignore_expires=True)
+        cookies = [{"name": cookie.name, "value": cookie.value, "domain": cookie.domain, "path": cookie.path,
+                    "expires": cookie.expires if cookie.expires else -1, "secure": cookie.secure,
+                    "httpOnly": cookie.has_nonstandard_attr('HttpOnly'), "sameSite": "Lax"} for cookie in jar]
+        auth.store.save_site(request.state.user['id'], '*', '個人匯入檔案', '', cookies)
+        return {"success": True, "message": f"已儲存 {count} 筆個人 cookies，之後解析與下載自動套用"}
+    except LoadError:
+        raise HTTPException(400, "無效的 Cookie 檔案，請使用 Netscape cookies.txt 格式")
+    except OSError:
+        raise HTTPException(500, "無法儲存 cookies，請檢查儲存空間")
+    except Exception:
+        raise HTTPException(400, "無效的 Cookie 檔案，請使用 Netscape cookies.txt 格式")
+    finally:
+        Path(path).unlink(missing_ok=True)
 
 @app.post("/api/update-ytdlp")
-async def update_ytdlp(background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None)):
-    verify_token(authorization)
+async def update_ytdlp(background_tasks: BackgroundTasks):
+    global update_in_progress
+    if update_in_progress or active_tasks or any(task.state == TaskState.QUEUED for task in tasks.values()):
+        raise HTTPException(409, "請等下載任務完成後再更新")
+    update_in_progress = True
+    restart_pending = False
+    process = None
     try:
-        # 使用 sys.executable 確保使用目前環境的 pip
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp[default]",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode != 0:
-             raise Exception(stderr.decode())
-
-        # 將終端機輸出的位元組解碼為字串
-        output_str = stdout.decode()
-
-        # 【核心邏輯】：判斷是否有真正下載並安裝新版本
-        # pip 如果有安裝新版本，輸出文字會包含 "Successfully installed"
-        if "Successfully installed" in output_str:
-            # 定義重啟伺服器的背景任務
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+        if process.returncode:
+            raise RuntimeError(stderr.decode(errors="replace"))
+        output = stdout.decode(errors="replace")
+        if "Successfully installed" in output:
             async def restart_server():
-                await asyncio.sleep(2)  # 等待 2 秒，讓 HTTP 成功回應可以確實傳送到前端
+                await asyncio.sleep(2)
                 logger.info("yt-dlp updated, restarting server...")
-                os._exit(0)    # 強制結束 Python 行程，觸發 Docker 的 restart 機制
-
-            # 將重啟任務加入背景執行
+                os._exit(0)
             background_tasks.add_task(restart_server)
+            restart_pending = True
+            return {"success": True, "output": output, "new_version": "更新成功，正在重新啟動", "require_restart": True}
+        version = getattr(yt_dlp.version, "__version__", "未知版本")
+        return {"success": True, "output": output, "new_version": f"已是最新版本 ({version})", "require_restart": False}
+    except asyncio.TimeoutError:
+        if process and process.returncode is None:
+            process.kill()
+            await process.wait()
+        raise HTTPException(504, "更新逾時，請稍後重試")
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    finally:
+        if not restart_pending:
+            update_in_progress = False
 
-            return {
-                "success": True, 
-                "output": output_str, 
-                "new_version": "更新成功！即將重啟系統以套用新版...",
-                "require_restart": True   # <--- 新增這行：告訴前端需要重啟
-            }
-        else:
-            # 如果沒有 "Successfully installed"，通常代表 "Requirement already satisfied"
-            # 代表目前已經是最新版，不需要重啟系統
-            import yt_dlp
-            current_version = getattr(yt_dlp.version, '__version__', '未知版本')
-            return {
-                "success": True, 
-                "output": output_str, 
-                "new_version": f"已是最新版本 ({current_version})，系統無需重啟",
-                "require_restart": False  # <--- 新增這行：告訴前端不需要重啟
-            }
-            
-    except Exception as e:
-        logger.error(f"Failed to update yt-dlp: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+install_account_routes(app, auth, broadcast_state)
+install_site_routes(app, auth, lambda: COOKIE_FILE)
+install_archive_routes(app, lambda: tasks)
+
 # Mount frontend
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+app.mount("/", StaticFiles(directory=str(Path(__file__).parent / "frontend"), html=True), name="frontend")

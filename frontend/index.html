@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>影片下載網頁系統</title>
+    <title>通用媒體下載工具</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -146,6 +146,7 @@
         .btn-interactive:active:not(:disabled) {
             transform: scale(0.96);
         }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
     </style>
 </head>
 <body class="min-h-screen text-slate-200 font-sans antialiased overflow-x-hidden">
@@ -154,13 +155,13 @@
         <!-- Global Toast Notification -->
         <transition name="toast-slide">
             <div v-if="toast.show" 
-                 class="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] px-6 py-3 rounded-full flex items-center gap-3 backdrop-blur-md shadow-2xl border transition-all"
+                 class="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] w-max max-w-[calc(100vw-2rem)] px-6 py-3 rounded-2xl flex items-center gap-3 backdrop-blur-md shadow-2xl border transition-all"
                  :class="toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400/50 text-white' : 'bg-rose-500/90 border-rose-400/50 text-white'">
                 
                 <svg v-if="toast.type === 'success'" class="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                 <svg v-else class="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                 
-                <span class="font-medium whitespace-nowrap">{{ toast.message }}</span>
+                <span class="font-medium break-words min-w-0">{{ toast.message }}</span>
                 <button @click="toast.show = false" class="ml-2 hover:opacity-75 transition-opacity">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
@@ -168,16 +169,33 @@
         </transition>
 
         <!-- Auth Overlay -->
-        <div v-if="!isAuthenticated" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div v-if="!isAuthenticated" class="fixed overflow-y-auto inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div class="glass-panel p-8 rounded-2xl w-full max-w-sm border-t border-white/20">
                 <h2 class="text-2xl font-bold mb-6 text-center text-white flex items-center justify-center gap-2">
                     <svg class="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                     系統登入
                 </h2>
+                <form v-if="authConfig.password_enabled !== false" @submit.prevent="login('password')" class="space-y-3 mb-5">
+                    <label class="block text-sm text-slate-300">帳號
+                        <input v-model="usernameInput" autocomplete="username" required class="w-full mt-2 glass-input rounded-xl p-3" placeholder="管理者提供的帳號">
+                    </label>
+                    <label class="block text-sm text-slate-300">密碼
+                        <input v-model="passwordInput" type="password" autocomplete="current-password" required class="w-full mt-2 glass-input rounded-xl p-3" placeholder="請輸入密碼">
+                    </label>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 rounded-xl">帳號登入</button>
+                </form>
+                <details v-if="authConfig.token_enabled" class="mb-4">
+                    <summary class="text-sm text-indigo-300 cursor-pointer mb-3">管理者 Token 登入</summary>
+                <template v-if="authConfig.token_enabled">
                 <input v-model="tokenInput" @keyup.enter="login" type="password" placeholder="請輸入 AUTH_TOKEN" class="w-full glass-input rounded-xl p-3 mb-6 transition-all">
                 <button @click="login" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] text-white font-medium py-3 rounded-xl btn-interactive flex items-center justify-center gap-2">
                     <span>登入系統</span>
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </button>
+                </template>
+                </details>
+                <button v-if="authConfig.sso_enabled" @click="loginSso" class="w-full mt-4 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 rounded-xl">
+                    使用 {{ authConfig.sso_name }} 登入
                 </button>
                 <p v-if="authError" class="text-rose-400 mt-4 text-center text-sm bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">{{ authError }}</p>
             </div>
@@ -185,22 +203,29 @@
 
         <template v-else>
             <!-- Header -->
-            <header class="glass-panel p-5 px-6 rounded-2xl flex justify-between items-center shrink-0 border-t border-white/20">
+            <header class="glass-panel p-5 px-6 rounded-2xl flex flex-wrap gap-3 justify-between items-center shrink-0 border-t border-white/20">
                 <div class="flex items-center gap-3">
                     <img src="/favicon.svg" alt="App Icon" class="w-10 h-10 shadow-lg rounded-xl">
-                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">影片下載系統</h1>
+                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">通用媒體下載</h1>
                 </div>
-                <div class="flex gap-3">
-                    <button @click="openSettings" class="glass-panel hover:bg-white/10 text-slate-200 px-4 py-2 rounded-xl btn-interactive flex items-center gap-2">
+                <div class="flex gap-2 flex-wrap justify-end">
+                    <button v-if="isAdmin" @click="openUsers" aria-label="使用者管理" class="glass-panel hover:bg-white/10 text-slate-200 px-3 py-2 rounded-xl text-sm">使用者</button>
+                    <button @click="openSites" aria-label="Cookies 設定" class="glass-panel hover:bg-white/10 text-slate-200 px-3 py-2 rounded-xl text-sm">Cookies 設定</button>
+                    <button v-if="isAdmin" aria-label="設定" @click="openSettings" class="glass-panel hover:bg-white/10 text-slate-200 px-4 py-2 rounded-xl btn-interactive flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                         <span class="hidden sm:inline">設定</span>
                     </button>
-                    <button @click="logout" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-4 py-2 rounded-xl btn-interactive flex items-center gap-2">
+                    <button aria-label="登出" @click="logout" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-4 py-2 rounded-xl btn-interactive flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                         <span class="hidden sm:inline">登出</span>
                     </button>
                 </div>
             </header>
+
+            <div class="glass-panel rounded-xl px-5 py-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span class="text-slate-300">{{ currentUser?.name }} · {{ isAdmin ? '管理者' : '一般使用者' }}</span>
+                <span class="text-indigo-300">{{ quotaText }}<span v-if="!isAdmin" class="text-slate-400"> · 已完成 {{ quota.used }} · 預留 {{ quota.reserved }}</span></span>
+            </div>
 
             <!-- Main Layout: Two Columns -->
             <div class="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
@@ -215,7 +240,7 @@
                             影片連結
                         </label>
                         <div class="flex flex-col sm:flex-row gap-3">
-                            <input v-model="url" @keyup.enter="parseUrl" type="text" placeholder="請輸入影片網址 (YouTube, Bilibili等)..." class="flex-1 glass-input rounded-xl p-3 transition-all placeholder-slate-500">
+                            <input v-model="url" @keyup.enter="parseUrl" type="text" placeholder="影片網站、m3u8、MPD 或媒體直連…" class="flex-1 glass-input rounded-xl p-3 transition-all placeholder-slate-500">
                             <button @click="parseUrl" :disabled="isParsing || !url" class="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:shadow-none hover:shadow-[0_0_15px_rgba(79,70,229,0.4)] text-white px-6 py-3 rounded-xl btn-interactive whitespace-nowrap font-medium flex items-center justify-center gap-2">
                                 <template v-if="isParsing">
                                     <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -227,11 +252,49 @@
                                 </template>
                             </button>
                         </div>
+                        <div class="flex flex-wrap gap-3 items-center mt-3">
+                            <button @click="openSites" class="text-sm px-3 py-2 rounded-lg border border-indigo-400/40 text-indigo-300 hover:bg-indigo-500/10">cookies.txt 使用教學與匯入</button>
+                            <p class="text-xs text-slate-400">影片需要登入才能觀看時，請匯入自己瀏覽器匯出的 cookies.txt。</p>
+                        </div>
+                        <div v-if="loginRequiredUrl && loginRequiredUrl === url.trim()" class="mt-4 p-4 rounded-xl border border-amber-400/30 bg-amber-500/10 space-y-3">
+                            <p class="text-sm text-amber-200">來源可能需要登入。請依教學匯入 cookies.txt，再按「解析網址」重試。</p>
+                            <button @click="openSites" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-4 py-2 text-sm text-white">查看教學並匯入 cookies.txt</button>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-5 rounded-2xl space-y-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="text-sm text-slate-300">影片輸出
+                                <select v-model="outputFormat" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
+                                    <option value="mp4">MP4</option><option value="mkv">MKV</option><option value="original">保留原始容器</option>
+                                </select>
+                            </label>
+                            <label class="text-sm text-slate-300">音訊輸出
+                                <select v-model="audioFormat" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
+                                    <option value="mp3">MP3</option><option value="m4a">M4A</option>
+                                </select>
+                            </label>
+                        </div>
+                        <details>
+                            <summary class="text-sm text-indigo-300 cursor-pointer">串流來源進階選項</summary>
+                            <div class="space-y-3 mt-3">
+                                <label class="block text-sm text-slate-300">來源網頁（Referer）
+                                    <input v-model="referer" type="url" placeholder="播放影片的網頁網址，選填" class="w-full mt-2 glass-input rounded-xl p-3">
+                                </label>
+                                <label class="block text-sm text-slate-300">瀏覽器識別（User-Agent）
+                                    <input v-model="userAgent" placeholder="選填" class="w-full mt-2 glass-input rounded-xl p-3">
+                                </label>
+                                <p class="text-xs text-slate-400">若串流有來源限制，請使用播放頁面的資訊。解析與下載都會套用。</p>
+                            </div>
+                        </details>
+                        <p class="text-xs text-slate-400">支援 yt-dlp 可解析的網站、HLS（m3u8／TS）、DASH（MPD）與媒體直連。MP4／MKV 會重新封裝，遇到編碼不相容可改選 MKV。</p>
                     </div>
 
                     <!-- Parse Results -->
                     <transition name="slide-up">
                         <div v-if="parseResult" class="glass-panel p-6 rounded-2xl border-t border-white/20 bg-gradient-to-b from-white/5 to-transparent">
+                            <p v-if="sourceChanged" class="text-sm text-amber-300 mb-4">來源已變更，請重新解析後再下載。</p>
+                            <p v-if="parseResult.warning" class="text-sm text-amber-300 mb-4">{{ parseResult.warning }}</p>
                             <template v-if="parseResult.is_playlist">
                                 <div class="flex items-start gap-4 mb-5 pb-5 border-b border-white/10">
                                     <div class="bg-white/10 p-3 rounded-xl shrink-0">
@@ -252,17 +315,17 @@
                                             </label>
                                             <div class="relative">
                                                 <div @click="toggleBatchDropdown" class="glass-input rounded-lg px-3 py-1.5 text-sm cursor-pointer border border-white/20 bg-slate-800/80 hover:bg-slate-700/80 transition-colors flex items-center justify-between gap-2 min-w-[160px]">
-                                                    <span class="font-medium">{{ batchDownloadFormat === 'video' ? '🎬 最高畫質 (MP4)' : '🎵 純音訊 (MP3)' }}</span>
+                                                    <span class="font-medium">{{ batchDownloadFormat === 'video' ? '🎬 自動最佳畫質' : '🎵 純音訊' }}</span>
                                                     <svg class="w-4 h-4 text-slate-400 transition-transform duration-300" :class="{ 'rotate-180': isBatchDropdownOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                                 </div>
                                                 <transition name="fade-slide">
                                                     <ul v-if="isBatchDropdownOpen" class="absolute z-50 right-0 mt-1.5 w-48 bg-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl py-1 overflow-hidden">
                                                         <li @click="selectBatchFormat('video')" class="px-4 py-2 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2" :class="{ 'bg-white/5 text-indigo-300 font-medium': batchDownloadFormat === 'video' }">
-                                                            <span class="flex-1">🎬 最高畫質 (MP4)</span>
+                                                            <span class="flex-1">🎬 自動最佳畫質</span>
                                                             <svg v-if="batchDownloadFormat === 'video'" class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                                         </li>
                                                         <li @click="selectBatchFormat('audio')" class="px-4 py-2 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2" :class="{ 'bg-white/5 text-indigo-300 font-medium': batchDownloadFormat === 'audio' }">
-                                                            <span class="flex-1">🎵 純音訊 (MP3)</span>
+                                                            <span class="flex-1">🎵 純音訊</span>
                                                             <svg v-if="batchDownloadFormat === 'audio'" class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                                         </li>
                                                     </ul>
@@ -287,7 +350,7 @@
                                             <span class="truncate flex-1 transition-colors" :class="{'text-white font-medium': item.selected, 'text-slate-400 group-hover:text-slate-300': !item.selected}">{{ index + 1 }}. {{ item.title }}</span>
                                         </div>
                                     </div>
-                                    <button @click="startBatchDownload" :disabled="selectedCount === 0" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:shadow-none text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2 transition-all">
+                                    <button @click="startBatchDownload" :disabled="sourceChanged || selectedCount === 0" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:shadow-none text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2 transition-all">
                                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                         下載選取的 {{ selectedCount }} 首歌曲
                                     </button>
@@ -312,23 +375,24 @@
                                         <transition name="fade-slide">
                                             <ul v-if="isFormatDropdownOpen" class="absolute z-50 left-0 right-0 mt-2 bg-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl py-2 max-h-60 overflow-y-auto custom-scrollbar">
                                                 <li @click="selectFormat('audio_only')" class="px-4 py-2.5 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2 border-b border-white/5 pb-3 mb-1" :class="{ 'bg-white/5 text-indigo-300 font-medium': selectedFormat === 'audio_only' }">
-                                                    <span class="flex-1">🎵 純音訊 (MP3)</span>
+                                                    <span class="flex-1">🎵 純音訊</span>
                                                     <svg v-if="selectedFormat === 'audio_only'" class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                                 </li>
+                                                <li v-if="parseResult.has_video" @click="selectFormat('best')" class="px-4 py-3 text-sm cursor-pointer hover:bg-white/10 text-indigo-300">🎬 自動最佳畫質</li>
                                                 <li class="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider select-none">
-                                                    🎬 影片畫質 (MP4)
+                                                    🎬 影片畫質
                                                 </li>
                                                 <li v-for="fmt in parseResult.video_formats" :key="fmt.id" 
                                                     @click="selectFormat(fmt.id)" 
                                                     class="px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2"
                                                     :class="{ 'bg-white/5 text-indigo-300 font-medium': selectedFormat === fmt.id }">
-                                                    <span class="flex-1">{{ fmt.resolution }} ({{ fmt.ext }})</span>
+                                                    <span class="flex-1">{{ fmt.resolution }} · {{ fmt.ext }} · {{ fmt.id }}{{ fmt.fps ? ` · ${fmt.fps}fps` : '' }}</span>
                                                     <svg v-if="selectedFormat === fmt.id" class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                                 </li>
                                             </ul>
                                         </transition>
                                     </div>
-                                    <button @click="startDownload" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
+                                    <button @click="startDownload" :disabled="sourceChanged" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
                                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                         加入下載佇列
                                     </button>
@@ -366,6 +430,8 @@
                         </div>
                     </div>
 
+                    <button @click="downloadAll" :disabled="completedCount === 0" class="w-full mb-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 py-3 font-medium text-white">一鍵下載 ZIP（{{ completedCount }} 個已完成項目）</button>
+                    <p class="text-sm text-slate-400 mb-4">進行中 {{ activeDownloads }} / {{ config.max_concurrent_downloads }} · 排隊 {{ tasks.filter(t => t.state === 'QUEUED').length }}</p>
                     <!-- Scrolling Area -->
                     <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 relative overflow-x-hidden">
 
@@ -383,7 +449,7 @@
                                             <h4 class="font-semibold text-slate-100 truncate mb-1" :title="task.title">{{ task.title }}</h4>
                                             <div class="text-xs text-slate-400 flex flex-wrap gap-2 items-center">
                                                 <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30">
-                                                    {{ task.is_audio_only ? 'MP3' : 'MP4' }}
+                                                    {{ task.output_format === 'original' ? '原始容器' : (task.output_format || 'mp4').toUpperCase() }}
                                                 </span>
                                                 <span class="px-2 py-0.5 rounded bg-white/5 border border-white/10">狀態: {{ getStatusText(task.state) }}</span>
                                                 <span v-if="task.state === 'DOWNLOADING'" class="text-blue-300">速度: {{ task.speed || '計算中...' }}</span>
@@ -394,7 +460,8 @@
                                             <button v-if="task.state === 'COMPLETED'" @click="downloadFile(task)" title="下載至電腦" class="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 p-2 rounded-lg btn-interactive">
                                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                                             </button>
-                                            <button @click="deleteTask(task.task_id)" title="刪除任務" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 p-2 rounded-lg btn-interactive">
+                                            <button v-if="task.state === 'ERROR'" @click="retryTask(task)" title="重試任務" class="bg-indigo-500/20 text-indigo-300 px-3 py-2 rounded-lg text-sm">重試</button>
+                                            <button :disabled="['DOWNLOADING', 'PROCESSING'].includes(task.state)" @click="deleteTask(task.task_id)" title="刪除任務" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 p-2 rounded-lg btn-interactive">
                                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                             </button>
                                         </div>
@@ -409,6 +476,8 @@
                                     </div>
                                     <div v-if="task.state === 'ERROR'" class="text-sm text-rose-400 mt-2 bg-rose-500/10 p-2 rounded border border-rose-500/20">
                                         {{ task.error_msg }}
+                                        <button v-if="task.login_required" @click="openSites" class="block mt-3 text-sm bg-indigo-600 text-white rounded-lg px-3 py-2">查看教學並匯入 cookies.txt</button>
+                                        <p v-if="task.login_required" class="text-xs text-slate-400 mt-2">匯入後，按此任務的「重試」按鈕。</p>
                                     </div>
                                 </div>
                             </transition-group>
@@ -419,9 +488,9 @@
 
             <!-- Settings Modal -->
             <transition name="slide-up">
-                <div v-if="showSettings" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div class="glass-panel p-6 sm:p-8 rounded-2xl w-full max-w-md border-t border-white/20 shadow-2xl relative">
-                        <button @click="showSettings = false" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+                <div v-if="showSettings && isAdmin" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div class="glass-panel p-6 sm:p-8 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border-t border-white/20 shadow-2xl relative">
+                        <button aria-label="關閉設定" @click="showSettings = false" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
                             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
 
@@ -432,28 +501,53 @@
 
                         <div class="mb-6">
                             <label class="block text-sm font-medium text-slate-300 mb-2">最大同時下載數</label>
-                            <input v-model.number="tempConfig.max_concurrent_downloads" type="number" min="1" max="10" class="w-full glass-input rounded-xl p-3">
+                            <input aria-label="最大同時下載數" v-model.number="tempConfig.max_concurrent_downloads" type="number" min="1" max="10" class="w-full glass-input rounded-xl p-3">
                         </div>
 
-                        <div class="mb-6 border-t border-white/10 pt-6">
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-slate-300 mb-2">每部影片的分段連線數（HLS／DASH）</label>
+                            <input aria-label="每部影片的分段連線數" v-model.number="tempConfig.concurrent_fragments" type="number" min="1" max="16" class="w-full glass-input rounded-xl p-3">
+                            <p class="text-xs text-slate-400 mt-2">同時下載數控制影片數量；分段連線數控制單部影片的串流下載。</p>
+                        </div>
+                        <div v-if="currentUser?.id === 'bootstrap-admin'" class="mb-6 border-t border-white/10 pt-6">
                             <div class="flex justify-between items-center mb-3">
                                 <h3 class="text-sm font-bold text-slate-200">Cookie 管理</h3>
                                 <span class="text-xs font-mono px-2 py-1 rounded-md border" :class="cookieStatus ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-amber-400 border-amber-500/30 bg-amber-500/10'">
-                                    狀態: {{ cookieStatus ? '已載入' : '未提供' }}
+                                    檔案: {{ cookieStatus ? '已上傳' : '未提供' }}
                                 </span>
                             </div>
-                            <div class="flex items-center gap-2">
-                                <input type="file" accept=".txt" ref="cookieFileInput" @change="handleCookieFileChange" class="text-sm text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-500/20 file:text-indigo-300 hover:file:bg-indigo-500/30 file:transition-colors flex-1 min-w-0 glass-input rounded-xl focus:outline-none cursor-pointer p-1.5" />
-                                <button @click="uploadCookie" :disabled="isUploadingCookie || !cookieFile" class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-400 text-white px-4 py-2 rounded-xl transition-all whitespace-nowrap flex-shrink-0 font-medium btn-interactive">
-                                    <span v-if="isUploadingCookie">上傳中...</span>
-                                    <span v-else>上傳</span>
-                                </button>
+                            <label class="block text-sm text-slate-300 mb-3">Cookies 來源
+                                <select v-model="tempConfig.cookie_source" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
+                                    <option value="file">上傳的 cookies.txt</option><option value="browser">執行主機的瀏覽器</option><option value="none">不使用 cookies</option>
+                                </select>
+                            </label>
+                            <div v-if="tempConfig.cookie_source === 'browser'" class="space-y-3 mb-3">
+                                <label class="block text-sm text-slate-300">瀏覽器
+                                    <select v-model="tempConfig.cookie_browser" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
+                                        <option v-for="browser in ['firefox','chrome','chromium','edge','safari','brave','opera','vivaldi','whale']" :value="browser">{{ browser }}</option>
+                                    </select>
+                                </label>
+                                <label class="block text-sm text-slate-300">設定檔名稱或路徑（選填）
+                                    <input v-model="tempConfig.cookie_profile" placeholder="留空使用預設設定檔" class="w-full mt-2 glass-input rounded-xl p-3">
+                                </label>
                             </div>
+                            <p class="text-xs text-slate-400 mb-3">此為系統管理者的舊版伺服器來源；個人 cookies 優先使用，只供自己的帳號解析與下載。</p>
+                            <button @click="openSites" class="text-sm text-indigo-300 border border-indigo-400/30 rounded-lg px-3 py-2">cookies.txt 使用教學與匯入</button>
+                            <div class="flex gap-3 mt-3">
+                                <button @click="testCookies" class="text-sm text-indigo-300 border border-indigo-400/30 rounded-lg px-3 py-2">測試已儲存的來源</button>
+                                <button v-if="cookieStatus" @click="deleteCookies" class="text-sm text-rose-300 border border-rose-400/30 rounded-lg px-3 py-2">刪除上傳檔案</button>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-2">目前使用：{{ systemStatus.source === 'browser' ? systemStatus.browser : systemStatus.source === 'none' ? '停用' : '上傳檔案' }}。變更來源需儲存設定。</p>
                             <transition name="slide-up">
                                 <p v-if="cookieMsg" class="text-sm mt-3 p-2 rounded-lg border" :class="cookieMsgSuccess ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'">{{ cookieMsg }}</p>
                             </transition>
                         </div>
 
+                        <div class="mb-6 border-t border-white/10 pt-6 text-sm text-slate-300 space-y-2">
+                            <p>FFmpeg／ffprobe：{{ systemStatus.ffmpeg_available ? '可使用' : '缺少，請安裝後重啟' }}</p>
+                            <p>SSO：{{ systemStatus.sso_enabled ? '已設定' : '尚未設定（請由部署環境設定 OIDC）' }}</p>
+                            <p class="text-xs text-slate-400">SSO 負責登入此工具。影片網站的登入狀態透過上方 cookies 來源提供。</p>
+                        </div>
                         <div class="mb-8 border-t border-white/10 pt-6">
                             <div class="flex justify-between items-center mb-3">
                                 <h3 class="text-sm font-bold text-slate-200">系統維護</h3>
@@ -483,6 +577,94 @@
                 </div>
             </transition>
 
+
+            <div v-if="showUserManagement && isAdmin" role="dialog" aria-label="使用者管理" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 p-4 flex items-center justify-center">
+                <div class="glass-panel rounded-2xl p-5 sm:p-7 w-full max-w-4xl max-h-[92vh] overflow-y-auto space-y-6">
+                    <div class="flex justify-between items-center gap-3">
+                        <h2 class="text-xl font-bold">使用者管理</h2>
+                        <button @click="showUserManagement = false" aria-label="關閉使用者管理" class="px-3 py-2 text-slate-300">✕</button>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-4 space-y-3">
+                        <h3 class="font-semibold">每日下載規則</h3>
+                        <label class="block text-sm text-slate-300">一般使用者預設每日上限
+                            <input v-model.number="userPolicy.default_daily_limit" type="number" min="0" max="10000" class="w-full mt-2 glass-input p-3 rounded-xl">
+                        </label>
+                        <p class="text-xs text-slate-400">管理者不限部數。個人可覆寫預設值；0 代表不允許新增下載。額度按成功完成的影片計算，排隊先預留、失敗歸還，每天台灣時間 00:00 重置。</p>
+                        <button @click="savePolicy" :disabled="userBusy" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-4 py-2 text-sm">儲存預設上限</button>
+                    </div>
+                    <form @submit.prevent="createUser" class="bg-white/5 rounded-xl p-4 space-y-4">
+                        <h3 class="font-semibold">新增使用者</h3>
+                        <div class="grid sm:grid-cols-2 gap-3">
+                            <label class="text-sm text-slate-300">新帳號<input v-model="newUser.username" required minlength="3" maxlength="64" autocomplete="off" class="w-full mt-2 glass-input p-3 rounded-xl" placeholder="英文、數字、. _ @ -"></label>
+                            <label class="text-sm text-slate-300">顯示名稱<input v-model="newUser.name" required maxlength="80" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
+                            <label class="text-sm text-slate-300">初始密碼<input v-model="newUser.password" type="password" required minlength="10" maxlength="256" autocomplete="new-password" class="w-full mt-2 glass-input p-3 rounded-xl" placeholder="至少 10 個字元"></label>
+                            <label class="text-sm text-slate-300">角色<select v-model="newUser.role" class="w-full mt-2 glass-input p-3 rounded-xl bg-slate-800"><option value="user">一般使用者</option><option value="admin">管理者（不限部數）</option></select></label>
+                        </div>
+                        <div v-if="newUser.role === 'user'" class="space-y-3">
+                            <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="newUser.inherit">使用全體預設每日上限</label>
+                            <label v-if="!newUser.inherit" class="block text-sm">個人每日上限<input v-model.number="newUser.daily_limit" type="number" min="0" max="10000" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
+                        </div>
+                        <button type="submit" :disabled="userBusy" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm">新增帳號</button>
+                    </form>
+                    <div class="space-y-4">
+                        <h3 class="font-semibold">帳號與個別設定</h3>
+                        <div v-for="user in managedUsers" :key="user.id" :data-user-id="user.id" class="border border-white/10 rounded-xl p-4 space-y-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <span class="font-semibold break-all">{{ user.username }} <span class="text-xs text-slate-400">{{ user.oidc_sub ? 'SSO' : user.id === 'bootstrap-admin' ? '系統管理者' : '本機帳號' }}</span></span>
+                                <span class="text-xs text-slate-400">今日完成 {{ user.quota.used }} · 預留 {{ user.quota.reserved }} · {{ user.quota.limit === null ? '不限' : `上限 ${user.quota.limit}` }}</span>
+                            </div>
+                            <div class="grid sm:grid-cols-2 gap-3">
+                                <label class="text-sm text-slate-300">名稱<input v-model="user.name" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
+                                <label class="text-sm text-slate-300">角色<select v-model="user.role" :disabled="user.id === 'bootstrap-admin'" class="w-full mt-2 glass-input p-3 rounded-xl bg-slate-800"><option value="user">一般使用者</option><option value="admin">管理者（不限部數）</option></select></label>
+                                <label v-if="!user.oidc_sub" class="text-sm text-slate-300">重設密碼<input v-model="user.newPassword" type="password" minlength="10" autocomplete="new-password" placeholder="留空保留密碼" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
+                                <div v-if="user.role === 'user'" class="text-sm space-y-2">
+                                    <label class="flex items-center gap-2"><input type="checkbox" v-model="user.inherit">使用全體預設每日上限</label>
+                                    <label v-if="!user.inherit" class="block">個人每日上限<input v-model.number="user.limitInput" type="number" min="0" max="10000" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" v-model="user.disabled" :disabled="user.id === 'bootstrap-admin'">停用此帳號</label>
+                                <button @click="saveUser(user)" :disabled="userBusy" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm">儲存使用者</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showSites" role="dialog" aria-modal="true" aria-label="Cookies 設定" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 p-4 flex items-center justify-center">
+                <div class="glass-panel rounded-2xl p-5 sm:p-7 w-full max-w-xl max-h-[92vh] overflow-y-auto space-y-5">
+                    <div class="flex items-center justify-between gap-3"><h2 class="font-bold text-xl">Cookies 設定</h2><button @click="showSites = false" aria-label="關閉 Cookies 設定" class="px-3 py-2">✕</button></div>
+                    <p class="text-sm text-slate-400">影片需要登入才能觀看時，先在自己的電腦登入網站，再匯入 cookies.txt。匯入資料只供你的帳號使用。</p>
+                    <section aria-labelledby="cookie-guide-title" class="rounded-xl border border-indigo-400/25 bg-indigo-500/5 p-4 space-y-3">
+                        <h3 id="cookie-guide-title" class="font-semibold">cookies.txt 使用教學</h3>
+                        <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer" class="inline-flex text-sm text-indigo-300 underline underline-offset-4 break-words">安裝 Get cookies.txt LOCALLY ↗</a>
+                        <ol class="list-decimal pl-5 space-y-2 text-sm text-slate-300 leading-relaxed">
+                            <li>在電腦的 Chrome 開啟上方連結，按「加到 Chrome」，安裝擴充套件。</li>
+                            <li>開啟要下載的網站（例如 YouTube），登入自己的帳號，確認影片可以播放。</li>
+                            <li>保持在該網站分頁，點 Chrome 右上角的擴充功能圖示，開啟 Get cookies.txt LOCALLY。將 Export Format 設為 <strong class="text-white">Netscape</strong>，按 <strong class="text-white">Export</strong> 或 Export As，儲存 .txt 檔案。</li>
+                            <li>回到這裡選取檔案，按「匯入個人 cookies」。成功後關閉此視窗，重新按「解析網址」，或在失敗任務按「重試」。</li>
+                        </ol>
+                        <p class="text-xs text-slate-400">只需匯出要下載網站的 cookies；請選 Netscape 格式，檔案上限 2 MB。登入失效時，重新登入網站、匯出並匯入即可。</p>
+                    </section>
+                    <div class="space-y-3">
+                        <h3 class="font-semibold text-sm">匯入 cookies.txt</h3>
+                        <input type="file" accept=".txt" ref="cookieFileInput" @change="handleCookieFileChange" aria-label="個人 cookies 檔案" class="w-full text-sm glass-input rounded-xl p-3">
+                        <button @click="uploadCookie" :disabled="isUploadingCookie || !cookieFile" class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-400 px-4 py-2 rounded-lg text-sm">{{ isUploadingCookie ? '匯入中…' : '匯入個人 cookies' }}</button>
+                        <p v-if="cookieMsg" role="status" class="text-sm break-words" :class="cookieMsgSuccess ? 'text-emerald-300' : 'text-rose-300'">{{ cookieMsg }}</p>
+                        <p class="text-xs text-slate-400">新檔案會取代上一份個人匯入檔案。cookies 包含登入憑證，請妥善保管並只上傳至你信任的下載工具。</p>
+                    </div>
+                    <div class="border-t border-white/10 pt-4 space-y-3">
+                        <h3 class="font-semibold text-sm">已儲存的 cookies</h3>
+                        <div v-if="siteAccounts.length" class="space-y-3">
+                            <div v-for="site in siteAccounts" :key="site.site_key" class="border border-white/10 p-3 rounded-xl flex justify-between items-center gap-3">
+                                <span class="break-all text-sm">{{ site.name }}<span class="block text-xs text-slate-400">僅供自己的帳號使用</span></span>
+                                <button @click="forgetSite(site)" class="text-sm text-rose-300 px-3 py-2 border border-rose-400/30 rounded-lg shrink-0">移除</button>
+                            </div>
+                        </div>
+                        <p v-else class="text-sm text-slate-400">尚未匯入個人 cookies。</p>
+                    </div>
+                </div>
+            </div>
         </template>
             <transition name="slide-up">
     <div v-if="confirmModal.show" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center z-[100] p-4">

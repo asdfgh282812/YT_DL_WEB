@@ -1,3 +1,6 @@
 venv/
 __pycache__/
 uvicorn_output.log
+config/cookies.txt
+config/users.sqlite3
+config/cookies.txt

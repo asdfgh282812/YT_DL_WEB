@@ -7,13 +7,14 @@ from unittest.mock import patch, MagicMock, AsyncMock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import main
+from authentication import AUTH_TOKEN
 from fastapi.testclient import TestClient
 
 class TestUpdateYtDlp(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         # Setup TestClient and ensure AUTH_TOKEN matches
-        main.AUTH_TOKEN = "test_token"
         self.client = TestClient(main.app)
+        self.headers = {"authorization": "Bearer " + AUTH_TOKEN}
 
     @patch('main.os._exit')
     @patch('main.asyncio.create_subprocess_exec')
@@ -24,7 +25,7 @@ class TestUpdateYtDlp(unittest.IsolatedAsyncioTestCase):
         mock_process.returncode = 0
         mock_create_subprocess.return_value = mock_process
 
-        response = self.client.post("/api/update-ytdlp", headers={"authorization": "Bearer test_token"})
+        response = self.client.post("/api/update-ytdlp", headers=self.headers)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["success"])
@@ -42,7 +43,7 @@ class TestUpdateYtDlp(unittest.IsolatedAsyncioTestCase):
         mock_process.returncode = 0
         mock_create_subprocess.return_value = mock_process
 
-        response = self.client.post("/api/update-ytdlp", headers={"authorization": "Bearer test_token"})
+        response = self.client.post("/api/update-ytdlp", headers=self.headers)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["success"])
@@ -57,7 +58,7 @@ class TestUpdateYtDlp(unittest.IsolatedAsyncioTestCase):
         mock_process.returncode = 1
         mock_create_subprocess.return_value = mock_process
 
-        response = self.client.post("/api/update-ytdlp", headers={"authorization": "Bearer test_token"})
+        response = self.client.post("/api/update-ytdlp", headers=self.headers)
 
         self.assertEqual(response.status_code, 500)
         self.assertIn("Error installing package", response.json()["detail"])

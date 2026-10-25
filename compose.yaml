@@ -1,0 +1,13 @@
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    restart: unless-stopped
+    ports:
+      - "1200:8000"
+    env_file: .env
+    environment:
+      AUTH_TOKEN: ${AUTH_TOKEN:?請先在 .env 設定 AUTH_TOKEN}
+    volumes:
+      - /volume1/docker/Youtube_Downloader/config:/app/config
+      - /volume1/docker/Youtube_Downloader/temp:/app/temp

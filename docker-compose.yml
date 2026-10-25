@@ -1,18 +1,13 @@
-version: '3.8'
-
 services:
   video-downloader:
     build: .
     container_name: video-downloader
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "1280:8000"
+    env_file: .env
     environment:
-      - PUID=1000
-      - PGID=1000
-      - AUTH_TOKEN=your_secure_password_here
+      AUTH_TOKEN: ${AUTH_TOKEN:?請先在 .env 設定 AUTH_TOKEN}
     volumes:
-      - ./frontend:/app/frontend
-      - ./temp:/app/temp
       - ./config:/app/config
-      - ./main.py:/app/main.py
+      - ./temp:/app/temp
