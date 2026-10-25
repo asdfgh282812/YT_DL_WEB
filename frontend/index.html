@@ -2,719 +2,1213 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
     <title>通用媒體下載工具</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
-            },
-            animation: {
-              'stripes': 'progress-bar-stripes 1s linear infinite',
-            }
-          }
-        }
-      }
-    </script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+    <link rel="apple-touch-icon" href="/favicon.svg?v=2">
     <!-- Vue 3 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <style>
+        /* ==========================================================
+           Design tokens
+           ========================================================== */
+        :root {
+            color-scheme: light dark;
+
+            --bg: #ffffff;
+            --surface: #ffffff;
+            --fill: #f5f5f7;
+            --fill-hover: #ebebef;
+            --label: #1d1d1f;
+            --label-2: #6e6e73;
+            --label-3: #8e8e93;
+            --sep: rgba(0, 0, 0, 0.1);
+
+            --accent: #0071e3;          /* text, links, focus */
+            --accent-fill: #0071e3;     /* filled buttons */
+            --accent-fill-hover: #0066cc;
+            --red-fill: #d70015;
+            --placeholder: #737378;
+            --chip: #efeff2;
+            --green: #248a3d;
+            --red: #d70015;
+            --orange: #b25000;
+
+            --tint-accent: color-mix(in srgb, var(--accent) 11%, transparent);
+            --tint-green: color-mix(in srgb, var(--green) 12%, transparent);
+            --tint-red: color-mix(in srgb, var(--red) 10%, transparent);
+            --tint-orange: color-mix(in srgb, var(--orange) 12%, transparent);
+
+            --material: rgba(245, 245, 247, 0.72);
+            --material-thick: rgba(255, 255, 255, 0.82);
+            --scrim: rgba(0, 0, 0, 0.3);
+            --shadow-lift: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04), 0 12px 28px rgba(0, 0, 0, 0.07), 0 40px 80px rgba(0, 0, 0, 0.08);
+            --shadow-chip: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.05);
+            --glass: rgba(255, 255, 255, 0.72);
+            --glass-edge: inset 0 0.5px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 0.5px rgba(255, 255, 255, 0.55);
+            --ambient: none;
+            --shadow-float: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 20px 60px rgba(0, 0, 0, 0.22);
+
+            --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+
+            /* Easing. cubic-bezier fallbacks first, then real spring curves
+               (damping 1.0 = settle without overshoot, 0.72 = visible bounce). */
+            --ease: cubic-bezier(0.32, 0.72, 0, 1);
+            --ease-bounce: cubic-bezier(0.34, 1.4, 0.5, 1);
+            --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        @supports (transition-timing-function: linear(0, 1)) {
+            :root {
+                --ease: linear(0, 0.048, 0.153, 0.278, 0.403, 0.516, 0.614, 0.697, 0.764, 0.817, 0.86, 0.893, 0.919, 0.939, 0.954, 0.966, 0.974, 0.981, 0.986, 0.989, 0.992, 0.994, 0.996, 0.997, 0.998, 0.998, 1);
+                --ease-bounce: linear(0, 0.073, 0.235, 0.424, 0.603, 0.753, 0.867, 0.946, 0.997, 1.025, 1.036, 1.038, 1.034, 1.027, 1.02, 1.013, 1.008, 1.004, 1.001, 1, 0.999, 0.999, 0.999, 0.999, 0.999, 0.999, 1);
+            }
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #000000;
+                --surface: #1c1c1e;
+                --fill: #2c2c2e;
+                --fill-hover: #3a3a3c;
+                --label: #f5f5f7;
+                --label-2: #a1a1a6;
+                --label-3: #8e8e93;
+                --placeholder: #8e8e93;
+                --chip: #2c2c2e;
+                --sep: rgba(255, 255, 255, 0.13);
+                --accent: #2997ff;
+                --green: #30d158;
+                --red: #ff453a;
+                --orange: #ff9f0a;
+                --material: rgba(22, 22, 24, 0.72);
+                --material-thick: rgba(44, 44, 46, 0.82);
+                --scrim: rgba(0, 0, 0, 0.55);
+                --shadow-lift: 0 0 0 0.5px rgba(255, 255, 255, 0.1), inset 0 0.5px 0 rgba(255, 255, 255, 0.12), 0 2px 6px rgba(0, 0, 0, 0.5), 0 32px 70px rgba(0, 0, 0, 0.7);
+                --shadow-chip: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 6px 16px rgba(0, 0, 0, 0.4);
+                --glass: rgba(44, 44, 48, 0.58);
+                --glass-edge: inset 0 0.5px 0 rgba(255, 255, 255, 0.2), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+                --ambient: radial-gradient(60% 40% at 50% 0%, rgba(41, 151, 255, 0.10), transparent 72%);
+                --shadow-float: 0 0 0 0.5px rgba(255, 255, 255, 0.14), 0 24px 70px rgba(0, 0, 0, 0.7);
+            }
+        }
+
+        /* ==========================================================
+           Base
+           ========================================================== */
+        *, *::before, *::after { box-sizing: border-box; }
         [v-cloak] { display: none; }
-
+        html { -webkit-text-size-adjust: 100%; scroll-padding-top: 72px; }
         body {
-            background-color: #0f172a; /* bg-slate-900 */
-            background-image:
-                radial-gradient(at 0% 0%, rgba(30, 58, 138, 0.25) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(88, 28, 135, 0.25) 0px, transparent 50%);
-            background-attachment: fixed;
-            background-repeat: no-repeat;
-            background-size: cover;
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--label);
+            font: 400 16px/1.5 var(--font);
+            letter-spacing: 0;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+        }
+        * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--label) 24%, transparent) transparent; }
+        input, textarea, select { caret-color: var(--accent); }
+        body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: var(--ambient); pointer-events: none; }
+        h1, h2, h3, h4, p { margin: 0; }
+        button, input, select { font: inherit; color: inherit; letter-spacing: inherit; }
+        button { cursor: pointer; border: 0; background: none; padding: 0; }
+        button:disabled { cursor: default; }
+        ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+        :focus { outline: none; }
+        :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+        input:not([type="checkbox"]):not([type="file"]):focus-visible { outline: none; }
+        .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+        .tnum { font-variant-numeric: tabular-nums; }
+        .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+        .ico-lg { width: 28px; height: 28px; stroke-width: 1.5; }
+        .ico-sm { width: 16px; height: 16px; stroke-width: 2; }
+
+        .spinner {
+            width: 16px; height: 16px; flex: none; border-radius: 50%;
+            border: 2px solid currentColor; border-right-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        .spinner-lg { width: 28px; height: 28px; border-width: 3px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ==========================================================
+           Navigation  (floating glass capsule, content scrolls beneath)
+           ========================================================== */
+        .nav { position: sticky; top: 0; z-index: 40; padding: 12px max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); pointer-events: none; }
+        .nav-inner {
+            pointer-events: auto; max-width: 720px; height: 52px; margin: 0 auto; padding: 8px 8px 8px 16px;
+            display: flex; align-items: center; justify-content: space-between; gap: 12px; border-radius: 999px;
+            background: var(--glass);
+            -webkit-backdrop-filter: saturate(200%) blur(26px); backdrop-filter: saturate(200%) blur(26px);
+            box-shadow: var(--glass-edge), var(--shadow-chip);
+            transition: box-shadow 0.5s var(--ease-out);
+        }
+        [data-scrolled] .nav-inner { box-shadow: var(--glass-edge), var(--shadow-lift); }
+        .brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+        .app-icon { display: block; width: 100%; height: 100%; clip-path: inset(3.8% round 24.5%); }
+        .icon-frame { display: block; flex: none; filter: drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.25)) drop-shadow(0 6px 12px rgba(0, 0, 0, 0.16)); }
+        .brand-icon { width: 32px; height: 32px; margin-left: -2px; filter: drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.25)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18)); }
+        .nav-actions { display: flex; align-items: center; gap: 2px; }
+        .nav-btn {
+            display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px;
+            border-radius: 980px; font-size: 14px; color: var(--label-2);
+            transition: background-color 0.2s, color 0.2s, transform 0.5s var(--ease);
+        }
+        @media (hover: hover) and (pointer: fine) { .nav-btn:hover { background: color-mix(in srgb, var(--label) 7%, transparent); color: var(--label); } }
+        .nav-btn:active { transform: scale(0.95); transition-duration: 0.08s; background: color-mix(in srgb, var(--label) 11%, transparent); }
+        @media (max-width: 640px) {
+            .nav-btn { width: 38px; padding: 0; justify-content: center; }
+            .nav-btn span { display: none; }
         }
 
-        /* Glassmorphism utility */
-        .glass-panel {
-            background-color: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        /* ==========================================================
+           Layout
+           ========================================================== */
+        .wrap { max-width: 720px; margin: 0 auto; padding: 0 max(20px, env(safe-area-inset-right)) 120px max(20px, env(safe-area-inset-left)); }
+        .hero { text-align: center; padding: clamp(64px, 13vw, 128px) 0 clamp(40px, 7vw, 64px); }
+        .hero h1 {
+            font-size: clamp(2.75rem, 10vw, 5.25rem); line-height: 1.04; font-weight: 700;
+            letter-spacing: -0.04em; text-wrap: balance; animation: rise-blur 1.3s var(--ease) both;
+        }
+        .hero p {
+            margin: 22px auto 0; max-width: 26em; font-size: clamp(1.05rem, 2.7vw, 1.4rem); line-height: 1.45; letter-spacing: -0.005em;
+            color: var(--label-2); text-wrap: balance; animation: rise 1.1s var(--ease) 0.14s both;
+        }
+        @supports (animation-timeline: scroll()) {
+            .hero { animation: hero-out linear both; animation-timeline: scroll(root); animation-range: 0 380px; }
+            @keyframes hero-out { to { opacity: 0; transform: translateY(-36px) scale(0.965); } }
         }
 
-        .glass-input {
-            background-color: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #f1f5f9;
+        .stack { display: flex; flex-direction: column; gap: 40px; }
+        .result { padding-top: 32px; border-top: 0.5px solid var(--sep); }
+        .caption { font-size: 13px; line-height: 1.5; color: var(--label-2); }
+        .caption-pad { padding: 0 16px; }
+        .center { text-align: center; }
+
+        /* Entrance: rise + fade, staggered */
+        .reveal { animation: rise 1s var(--ease) both; animation-delay: calc(var(--i, 0) * 80ms); }
+        @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(0.985); } to { opacity: 1; transform: none; } }
+        @keyframes rise-blur { from { opacity: 0; transform: translateY(18px) scale(0.98); filter: blur(12px); } to { opacity: 1; transform: none; filter: blur(0); } }
+
+        /* ==========================================================
+           Buttons
+           ========================================================== */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            height: 44px; padding: 0 22px; border-radius: 980px;
+            font-size: 15px; font-weight: 500; white-space: nowrap; user-select: none;
+            transition: background-color 0.2s, color 0.2s, opacity 0.2s, transform 0.5s var(--ease);
         }
-        .glass-input:focus {
-            outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        .btn:active:not(:disabled) { transform: scale(0.96); transition-duration: 0.08s; }
+        .btn:disabled { opacity: 0.4; }
+        .btn-sm { height: 34px; padding: 0 16px; font-size: 14px; }
+        .btn-block { width: 100%; }
+        .btn-primary { background: var(--accent-fill); color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: var(--accent-fill-hover); }
+        .btn-tinted { background: var(--tint-accent); color: var(--accent); }
+        .btn-tinted:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+        .btn-gray { background: var(--fill); color: var(--label); }
+        .btn-gray:hover:not(:disabled) { background: var(--fill-hover); }
+        .btn-danger { background: var(--tint-red); color: var(--red); }
+        .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 18%, transparent); }
+        .btn-icon {
+            width: 34px; height: 34px; border-radius: 50%; flex: none;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--fill); color: var(--label-2);
+            transition: background-color 0.2s, color 0.2s, transform 0.5s var(--ease), opacity 0.2s;
+        }
+        .btn-icon:hover:not(:disabled) { background: var(--fill-hover); color: var(--label); }
+        .btn-icon:active:not(:disabled) { transform: scale(0.9); transition-duration: 0.08s; }
+        .btn-icon:disabled { opacity: 0.35; }
+        .btn-icon.is-green { background: var(--tint-green); color: var(--green); }
+        .btn-icon.is-red { background: var(--tint-red); color: var(--red); }
+        .btn-icon.is-accent { background: var(--tint-accent); color: var(--accent); }
+        .link { color: var(--accent); font-size: inherit; border-radius: 4px; }
+        .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+        /* ==========================================================
+           Form controls
+           ========================================================== */
+        .composer { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+        @property --ang { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+        .url-wrap { position: relative; width: 100%; isolation: isolate; }
+        .url-field {
+            position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; height: 68px; padding: 0 10px 0 24px; border-radius: 999px;
+            background: var(--surface); box-shadow: var(--shadow-lift);
+            transition: box-shadow 0.45s var(--ease-out);
+        }
+        .url-field > .ico { color: var(--label-3); }
+        .url-field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; font-size: 19px; letter-spacing: -0.01em; }
+        .url-field input::placeholder { color: var(--placeholder); }
+        .send {
+            width: 48px; height: 48px; flex: none; border-radius: 50%; display: grid; place-items: center;
+            background: var(--accent-fill); color: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 3px 8px rgba(0, 0, 0, 0.12);
+            transition: background-color 0.3s, color 0.3s, box-shadow 0.3s, transform 0.5s var(--ease);
+        }
+        .send .ico { width: 22px; height: 22px; stroke-width: 2.2; }
+        .send:disabled { background: var(--fill); color: var(--label-3); box-shadow: none; }
+        .send:active:not(:disabled) { transform: scale(0.9); transition-duration: 0.08s; }
+        @media (hover: hover) and (pointer: fine) { .send:hover:not(:disabled) { background: var(--accent-fill-hover); } }
+        /* Parsing: a thin light travels around the capsule */
+        .url-wrap::before, .url-wrap::after {
+            content: ""; position: absolute; border-radius: 999px; pointer-events: none; opacity: 0; transition: opacity 0.6s var(--ease-out);
+            background: conic-gradient(from var(--ang), transparent 0 52%, #5ac8fa 72%, #0a84ff 88%, transparent 100%);
+        }
+        .url-wrap::before { inset: -1.5px; z-index: 2; padding: 1.5px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+        .url-wrap::after { inset: -2px; z-index: 0; filter: blur(18px); }
+        .url-wrap.busy { animation: ang 2.2s linear infinite; }
+        .url-wrap.busy::before { opacity: 1; }
+        .url-wrap.busy::after { opacity: 0.28; }
+        @keyframes ang { to { --ang: 360deg; } }
+
+        .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+        .chip {
+            position: relative; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 16px; border-radius: 999px;
+            background: var(--chip); font-size: 14px; color: var(--label-2); cursor: pointer;
+            transition: background-color 0.2s, transform 0.5s var(--ease);
+        }
+        @media (hover: hover) and (pointer: fine) { .chip:hover { background: color-mix(in srgb, var(--chip), var(--label) 5%); } }
+        .chip:active { transform: scale(0.96); transition-duration: 0.08s; }
+        .chip-value { color: var(--accent); font-weight: 500; }
+        .chip .ico { width: 14px; height: 14px; color: var(--accent); }
+        .menu.menu-chip { left: 0; right: auto; min-width: 200px; transform-origin: top left; }
+        .adv { width: 100%; text-align: center; }
+        .adv-sum { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--label-2); padding: 4px 8px; border-radius: 8px; transition: color 0.2s; }
+        .adv-sum:hover { color: var(--label); }
+        .adv .group { text-align: left; margin-top: 12px; }
+        .quota { margin-top: -10px; }
+        .input {
+            width: 100%; height: 44px; padding: 0 14px; border: 0; border-radius: 12px;
+            background: var(--fill); transition: box-shadow 0.25s var(--ease-out);
+        }
+        .input:focus { background: var(--fill-hover); }
+        .input::placeholder, .row-input::placeholder { color: var(--placeholder); }
+
+        /* Grouped list (inset) */
+        .group { background: var(--fill); border-radius: 14px; overflow: hidden; }
+        .row {
+            position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            min-height: 48px; padding: 10px 16px; width: 100%; text-align: left; font-size: 15px;
+        }
+        .row + .row::before, details.group > .disclosure-body > .row:first-child::before {
+            content: ""; position: absolute; left: 16px; right: 0; top: 0; height: 0.5px; background: var(--sep);
+        }
+        .row-title { flex: none; }
+        .row-sub { display: block; font-size: 12.5px; color: var(--label-2); line-height: 1.35; }
+        .row-value { color: var(--label-2); text-align: right; min-width: 0; }
+        .row-input {
+            flex: 1; min-width: 0; height: 28px; border: 0; background: none; text-align: right; color: var(--label-2);
+        }
+        .row-input:focus { color: var(--label); }
+        .row-tap { transition: background-color 0.15s; }
+        .row-tap:hover { background: color-mix(in srgb, var(--label) 4%, transparent); }
+        .row-tap:active { background: color-mix(in srgb, var(--label) 9%, transparent); transition-duration: 0.04s; }
+        .row-stack { flex-direction: column; align-items: stretch; gap: 8px; }
+        .group.has-menu { overflow: visible; }
+        .group.has-menu > .row:first-child { border-radius: 14px 14px 0 0; }
+        .group.has-menu > .row:last-child { border-radius: 0 0 14px 14px; }
+        .group.has-menu > .row:only-child { border-radius: 14px; }
+        .group.flat { background: none; border-radius: 0; box-shadow: none; border-top: 0.5px solid var(--sep); }
+        .group.flat .row { padding-left: 0; padding-right: 0; border-radius: 0 !important; }
+        .group.flat .row + .row::before { left: 0; }
+        .group.flat .row-tap:hover, .group.flat .row-tap:active { background: none; }
+        .group-surface { background: var(--surface); box-shadow: 0 0 0 0.5px var(--sep) inset; }
+
+        .select-btn { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 0; border-radius: 8px; color: var(--accent); font-size: 15px; text-align: right; }
+        .select-btn .ico { width: 14px; height: 14px; }
+        .select-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; color: var(--label); cursor: pointer; }
+        .select-field .ico { width: 14px; height: 14px; color: var(--label-3); }
+        .select-field:disabled { color: var(--label-2); cursor: default; }
+        .select-field:disabled .ico { opacity: 0.4; }
+        .menu.menu-fixed { position: fixed; top: auto; right: auto; z-index: 80; min-width: 0; max-width: none; }
+
+        /* Disclosure */
+        details > summary { list-style: none; cursor: pointer; }
+        details > summary::-webkit-details-marker { display: none; }
+        details > summary .chev { transition: transform 0.5s var(--ease); color: var(--label-3); }
+        details[open] > summary .chev { transform: rotate(90deg); }
+        details[open] > .disclosure-body { animation: fade-in 0.45s var(--ease-out); }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+        /* Round check (selection) */
+        .check {
+            position: relative; width: 22px; height: 22px; flex: none; border-radius: 50%;
+            box-shadow: inset 0 0 0 1.5px var(--label-3);
+            display: inline-flex; align-items: center; justify-content: center; color: #fff;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        .check .ico { width: 13px; height: 13px; stroke-width: 3; transform: scale(0.3); opacity: 0; transition: transform 0.45s var(--ease-bounce), opacity 0.15s; }
+        input:checked + .check { background: var(--accent-fill); box-shadow: none; }
+        input:checked + .check .ico { transform: none; opacity: 1; }
+        input:focus-visible + .check { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+        .check-row { cursor: pointer; }
+
+        /* Switch */
+        .switch {
+            appearance: none; -webkit-appearance: none; flex: none; position: relative; cursor: pointer;
+            width: 51px; height: 31px; border-radius: 999px; margin: 0;
+            background: color-mix(in srgb, var(--label-3) 45%, transparent);
+            transition: background-color 0.3s;
+        }
+        .switch::after {
+            content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25); transition: transform 0.5s var(--ease-bounce), width 0.2s;
+        }
+        .switch:checked { background: #34c759; }
+        .switch:checked::after { transform: translateX(20px); }
+        .switch:active::after { width: 33px; }
+        .switch:checked:active::after { transform: translateX(14px); }
+        .switch:disabled { opacity: 0.4; cursor: default; }
+
+        input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+        input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+        input[type="file"] { font-size: 14px; color: var(--label-2); }
+        input[type="file"]::file-selector-button {
+            margin-right: 12px; height: 32px; padding: 0 14px; border: 0; border-radius: 980px;
+            background: var(--tint-accent); color: var(--accent); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
         }
 
-        /* Select element styling for dark mode */
-        select option, select optgroup {
-            background-color: #1e293b;
-            color: #f1f5f9;
+        /* ==========================================================
+           Callouts / badges
+           ========================================================== */
+        .callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 14px; font-size: 14px; line-height: 1.5; }
+        .callout > .ico { margin-top: 2px; }
+        .callout-warn { background: var(--tint-orange); color: var(--orange); }
+        .callout-warn .callout-actions { margin-top: 10px; }
+        .callout-error { background: var(--tint-red); color: var(--red); }
+        .callout-text { color: var(--label); }
+        .badge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 980px; font-size: 12px; font-weight: 500; background: var(--fill); color: var(--label-2); }
+        .badge-green { background: var(--tint-green); color: var(--green); }
+        .badge-orange { background: var(--tint-orange); color: var(--orange); }
+        .badge-accent { background: var(--tint-accent); color: var(--accent); }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex: none; }
+
+        /* ==========================================================
+           Parse result
+           ========================================================== */
+        .media-head { display: flex; align-items: center; gap: 14px; padding: 0 0 20px; }
+        .tile { flex: none; display: grid; place-items: center; color: var(--accent); }
+        .tile .ico { width: 30px; height: 30px; stroke-width: 1.5; }
+        .media-title { font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -0.015em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+        .media-sub { font-size: 13px; color: var(--label-2); margin-top: 2px; }
+
+        .menu-anchor { position: relative; }
+        .menu {
+            position: absolute; z-index: 30; right: 0; top: calc(100% + 6px); min-width: 240px; max-width: min(340px, calc(100vw - 40px)); max-height: 320px; overflow-y: auto;
+            background: color-mix(in srgb, var(--surface) 93%, transparent); -webkit-backdrop-filter: saturate(180%) blur(30px); backdrop-filter: saturate(180%) blur(30px);
+            border-radius: 16px; box-shadow: var(--shadow-float); padding: 6px; transform-origin: top right; list-style: none; margin: 0;
+            overscroll-behavior: contain;
+        }
+        .menu-left { left: 0; right: 0; max-width: none; transform-origin: top center; }
+        .menu li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 12px; border-radius: 10px; font-size: 15px; cursor: pointer; transition: background-color 0.12s; }
+        .menu li:hover { background: color-mix(in srgb, var(--label) 8%, transparent); }
+        .menu li:active { background: color-mix(in srgb, var(--label) 14%, transparent); transition-duration: 0.03s; }
+        .menu li > span { flex: 1; min-width: 0; }
+        .menu li .ico { color: var(--accent); }
+        .menu li.selected { font-weight: 600; }
+        .menu li.menu-label { cursor: default; min-height: 30px; font-size: 12px; font-weight: 500; color: var(--label-2); }
+        .menu li.menu-label:hover { background: none; }
+        .menu hr { border: 0; height: 0.5px; background: var(--sep); margin: 4px 6px; }
+        .menu-enter-active { transition: opacity 0.2s var(--ease-out), transform 0.5s var(--ease); }
+        .menu-leave-active { transition: opacity 0.14s ease-out, transform 0.18s ease-out; }
+        .menu-enter-from, .menu-leave-to { opacity: 0; transform: scale(0.9) translateY(-6px); }
+
+        .entries { max-height: 288px; overflow-y: auto; background: var(--fill); border-radius: 14px; margin-top: 12px; }
+        .entry { display: flex; align-items: center; gap: 12px; padding: 11px 16px; font-size: 14.5px; cursor: pointer; position: relative; transition: background-color 0.15s; }
+        .entry + .entry::before { content: ""; position: absolute; top: 0; left: 50px; right: 0; height: 0.5px; background: var(--sep); }
+        .entry:hover { background: color-mix(in srgb, var(--label) 4%, transparent); }
+        .entry .num { color: var(--label-3); width: 2ch; text-align: right; flex: none; }
+        .entry .t { flex: 1; min-width: 0; color: var(--label-2); transition: color 0.2s; }
+        .entry.on .t { color: var(--label); }
+
+        .result-enter-active { transition: opacity 0.4s var(--ease-out), transform 0.8s var(--ease); }
+        .result-leave-active { transition: opacity 0.2s ease-out, transform 0.3s ease-out; }
+        .result-enter-from { opacity: 0; transform: translateY(24px) scale(0.97); }
+        .result-leave-to { opacity: 0; transform: translateY(-8px) scale(0.98); }
+
+        /* ==========================================================
+           Tasks
+           ========================================================== */
+        .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+        .section-head h2 { font-size: 32px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; }
+        .section-head h2 small { font-size: 17px; font-weight: 500; color: var(--label-3); margin-left: 6px; letter-spacing: 0; }
+        .conn { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--label-2); }
+
+        .tasks { position: relative; display: flex; flex-direction: column; }
+        .tasks.is-empty { display: none; }
+        .task { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 18px 2px; width: 100%; }
+        .task + .task::before { content: ""; position: absolute; top: 0; left: 56px; right: 0; height: 0.5px; background: var(--sep); }
+        .task-main { display: flex; align-items: center; gap: 14px; }
+        .state-ico { position: relative; width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--fill); color: var(--label-2); transition: background-color 0.5s, color 0.5s; }
+        .state-ico > * { grid-area: 1 / 1; animation: pop 0.6s var(--ease-bounce) both; }
+        @keyframes pop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
+        .st-DOWNLOADING { background: var(--tint-accent); color: var(--accent); }
+        .st-PROCESSING { background: var(--tint-orange); color: var(--orange); }
+        .st-COMPLETED { background: var(--tint-green); color: var(--green); }
+        .st-ERROR { background: var(--tint-red); color: var(--red); }
+        .task-info { flex: 1; min-width: 0; }
+        .task-title { font-size: 15.5px; font-weight: 600; letter-spacing: -0.005em; line-height: 1.35; }
+        .task-meta { display: flex; flex-wrap: wrap; gap: 0 10px; font-size: 13px; color: var(--label-2); margin-top: 1px; }
+        .task-meta .s-DOWNLOADING { color: var(--accent); }
+        .task-meta .s-PROCESSING { color: var(--orange); }
+        .task-meta .s-COMPLETED { color: var(--green); }
+        .task-meta .s-ERROR { color: var(--red); }
+        .task-actions { display: flex; gap: 8px; flex: none; }
+
+        .bar { height: 4px; margin-left: 56px; border-radius: 99px; background: var(--fill); overflow: hidden; }
+        .bar-fill { position: relative; height: 100%; border-radius: inherit; background: var(--label-3); overflow: hidden; transition: width 0.8s var(--ease), background-color 0.5s; }
+        .bar-fill.f-DOWNLOADING { background: var(--accent-fill); }
+        .bar-fill.f-PROCESSING { background: var(--orange); }
+        .bar-fill.f-PROCESSING::after {
+            content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent); animation: sweep 1.8s var(--ease-out) infinite;
+        }
+        @keyframes sweep { to { transform: translateX(100%); } }
+        .task-error { margin-left: 56px; font-size: 14px; line-height: 1.5; color: var(--red); word-break: break-word; }
+        .task-error .btn { margin-top: 10px; }
+        .task-error .hint { margin-top: 6px; color: var(--label-2); font-size: 12.5px; }
+
+        .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 48px 20px 24px; color: var(--label-2); }
+        .empty .ico { width: 44px; height: 44px; stroke-width: 1.2; color: var(--label-3); margin-bottom: 8px; }
+        .empty b { font-size: 19px; font-weight: 600; color: var(--label); letter-spacing: -0.01em; }
+        .empty span { font-size: 14px; }
+
+        .list-enter-active { transition: opacity 0.4s var(--ease-out), transform 0.8s var(--ease); }
+        .list-leave-active { transition: opacity 0.25s ease-out, transform 0.35s ease-out; position: absolute; left: 0; right: 0; }
+        .list-move { transition: transform 0.7s var(--ease); }
+        .list-enter-from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+        .list-leave-to { opacity: 0; transform: scale(0.94); }
+
+        /* ==========================================================
+           Overlays — sheets, alert, toast
+           ========================================================== */
+        .overlay {
+            position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+            padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+            background: var(--scrim); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+            transition: opacity 0.35s var(--ease-out), background-color 0.35s, -webkit-backdrop-filter 0.35s, backdrop-filter 0.35s;
+        }
+        .overlay-top { z-index: 100; -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+        .sheet {
+            position: relative; width: 100%; max-width: 560px; max-height: min(88vh, 860px); display: flex; flex-direction: column;
+            background: var(--surface); border-radius: 28px; box-shadow: var(--shadow-float); overflow: hidden;
+            transition: transform 0.7s var(--ease), opacity 0.3s var(--ease-out);
+        }
+        .sheet-lg { max-width: 760px; }
+        .sheet-head {
+            position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none;
+            padding: 18px 20px 14px 24px; background: var(--material-thick);
+            -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px);
+        }
+        .sheet-head h2 { font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -0.015em; }
+        .sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 24px 24px; display: flex; flex-direction: column; gap: 24px; }
+        .sheet-foot { flex: none; display: flex; justify-content: flex-end; gap: 10px; padding: 14px 24px calc(14px + env(safe-area-inset-bottom)); box-shadow: 0 -0.5px 0 var(--sep); background: var(--material-thick); -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
+        .sheet-section > h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.01em; color: var(--label-2); padding: 0 16px 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .sheet-section > .caption { padding: 8px 16px 0; }
+        .form-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
+        @media (min-width: 640px) { .form-grid { grid-template-columns: 1fr 1fr; } }
+        .field > span { display: block; font-size: 13px; color: var(--label-2); padding: 0 4px 6px; }
+        .user-card { background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 0.5px var(--sep) inset; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+        .user-card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+        .actions-inline { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        .sheet-enter-from, .sheet-leave-to { opacity: 0; }
+        .sheet-enter-from .sheet { transform: scale(0.92) translateY(12px); opacity: 0; }
+        .sheet-leave-to .sheet { transform: scale(0.96); opacity: 0; transition-duration: 0.22s; }
+        .sheet-leave-active { transition-duration: 0.25s; }
+        @media (max-width: 640px) {
+            .overlay { align-items: flex-end; padding: 0; }
+            .overlay-center { align-items: center; padding: 20px; }
+            .sheet:not(.alert) { max-width: none; max-height: 92vh; border-radius: 28px 28px 0 0; }
+            .sheet-enter-from .sheet:not(.alert) { transform: translateY(100%); opacity: 1; }
+            .sheet-leave-to .sheet:not(.alert) { transform: translateY(100%); opacity: 1; }
+            .sheet-body, .sheet-foot { padding-left: 16px; padding-right: 16px; }
+            .sheet-head { padding-left: 20px; padding-right: 14px; }
         }
 
-        /* Custom Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.25);
-        }
+        /* Confirmation card */
+        .alert { width: 380px; max-width: 100%; text-align: center; border-radius: 28px; background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+        .alert-body { padding: 34px 28px 4px; }
+        .alert-icon { width: 56px; height: 56px; margin: 0 auto 18px; border-radius: 50%; display: grid; place-items: center; background: var(--tint-red); color: var(--red); }
+        .alert-icon .ico { width: 26px; height: 26px; stroke-width: 1.6; }
+        .alert-body h3 { font-size: 21px; font-weight: 600; line-height: 1.25; letter-spacing: -0.015em; }
+        .alert-body p { margin-top: 8px; font-size: 15px; line-height: 1.55; color: var(--label-2); text-wrap: balance; }
+        .alert-actions { display: flex; flex-direction: column; gap: 10px; padding: 26px 28px 28px; }
+        .alert-actions .btn { height: 50px; font-size: 16px; }
+        .btn-destructive { background: var(--red-fill); color: #fff; }
+        @media (hover: hover) and (pointer: fine) { .btn-destructive:hover:not(:disabled) { filter: brightness(1.08); } }
+        .alert-center { text-align: center; }
+        .alert-enter-from .alert { transform: scale(0.94) translateY(10px); }
+        .alert-leave-to .alert { transform: scale(0.94); }
+        .alert-enter-from, .alert-leave-to { opacity: 0; }
+        .alert-enter-active .alert { transition: transform 0.7s var(--ease-bounce), opacity 0.25s; }
+        .alert-enter-from .alert, .alert-leave-to .alert { opacity: 0; }
+        .alert-leave-active { transition-duration: 0.2s; }
 
-        .progress-bar-striped {
-            background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
-            background-size: 1rem 1rem;
-        }
+        .restart-count { font-size: 56px; line-height: 1; font-weight: 700; letter-spacing: -0.03em; color: var(--accent); margin: 14px 0 4px; }
 
-        @keyframes progress-bar-stripes {
-            from { background-position: 1rem 0; }
-            to { background-position: 0 0; }
+        /* Toast — a capsule that grows out of the top edge */
+        .toast {
+            position: fixed; z-index: 200; top: max(12px, env(safe-area-inset-top)); left: 50%; translate: -50% 0;
+            display: flex; align-items: center; gap: 12px; max-width: min(460px, calc(100vw - 24px));
+            padding: 10px 10px 10px 12px; border-radius: 26px; color: #fff; background: #1c1c1e;
+            box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 14px 40px rgba(0, 0, 0, 0.35);
+            transform-origin: top center;
         }
+        .toast-ico { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; background: #30d158; color: #000; }
+        .toast-ico .ico { width: 16px; height: 16px; stroke-width: 2.6; }
+        .toast.is-error .toast-ico { background: #ff453a; color: #fff; }
+        .toast-msg { font-size: 14.5px; font-weight: 500; line-height: 1.35; padding: 3px 4px 3px 0; min-width: 0; word-break: break-word; }
+        .toast-x { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; color: rgba(255, 255, 255, 0.55); transition: background-color 0.15s, color 0.15s; }
+        .toast-x:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+        .toast-enter-active { transition: opacity 0.25s var(--ease-out), transform 0.7s var(--ease-bounce); }
+        .toast-leave-active { transition: opacity 0.2s ease-in, transform 0.3s ease-in; }
+        .toast-enter-from { opacity: 0; transform: translateY(-24px) scale(0.55); }
+        .toast-leave-to { opacity: 0; transform: translateY(-14px) scale(0.8); }
 
-        /* Vue Transitions */
-        .slide-up-enter-active, .slide-up-leave-active {
-            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .slide-up-enter-from, .slide-up-leave-to {
-            opacity: 0;
-            transform: translateY(20px);
-        }
+        /* ==========================================================
+           Sign in
+           ========================================================== */
+        .auth { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
+        .auth-inner { width: 100%; max-width: 340px; text-align: center; animation: rise 1s var(--ease) both; }
+        .auth-icon { width: 104px; height: 104px; margin: 0 auto 22px; display: block; animation: rise 1s var(--ease) both; }
+        .auth h1 { font-size: 30px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; }
+        .auth .sub { margin: 8px 0 28px; color: var(--label-2); font-size: 15px; }
+        .auth form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+        .auth .group { background: var(--surface); box-shadow: 0 0 0 0.5px var(--sep) inset; }
+        .auth .group { padding: 6px 0; }
+        .auth .group .row { min-height: 48px; padding: 0 16px; }
+        .auth .group input { flex: 1; min-width: 0; border: 0; background: none; height: 48px; font-size: 16px; }
+        .auth .group input::placeholder { color: var(--placeholder); }
+        .auth .btn { height: 50px; font-size: 16px; }
+        .auth-alt { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+        .auth-alt details summary { text-align: center; font-size: 14px; color: var(--accent); padding: 6px; }
+        .auth-alt details .disclosure-body { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+        .auth-error { margin-top: 18px; font-size: 14px; color: var(--red); animation: shake 0.5s var(--ease-out); }
+        @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 
-        .list-enter-active, .list-leave-active {
-            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        /* ==========================================================
+           Accessibility & preferences
+           ========================================================== */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.12s !important; scroll-behavior: auto !important; }
+            .reveal, .auth-inner, .auth-icon { animation: none; }
+            .sheet-enter-from .sheet, .sheet-leave-to .sheet, .alert-enter-from .alert, .alert-leave-to .alert,
+            .menu-enter-from, .menu-leave-to, .toast-enter-from, .toast-leave-to,
+            .list-enter-from, .list-leave-to, .result-enter-from, .result-leave-to { transform: none !important; }
+            .bar-fill::after, .url-wrap::before, .url-wrap::after { display: none; }
         }
-        .list-enter-from {
-            opacity: 0;
-            transform: translateX(30px);
+        @media (prefers-reduced-transparency: reduce) {
+            :root { --material: var(--bg); --material-thick: var(--surface); }
+            .nav-inner, .chip, .sheet-head, .sheet-foot, .menu, .alert, .overlay { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
         }
-        .list-leave-to {
-            opacity: 0;
-            transform: translateX(-30px);
+        @media (prefers-contrast: more) {
+            :root { --label-2: color-mix(in srgb, var(--label) 82%, var(--bg)); --sep: color-mix(in srgb, var(--label) 40%, transparent); }
+            .url-field, .chip, .nav-inner { box-shadow: 0 0 0 1px var(--sep); }
         }
-        .list-leave-active {
-            position: absolute;
-            width: 100%;
+        @supports not (backdrop-filter: blur(1px)) and (not (-webkit-backdrop-filter: blur(1px))) {
+            :root { --material: var(--bg); --material-thick: var(--surface); }
         }
-        .list-move {
-            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        
-        .toast-slide-enter-active, .toast-slide-leave-active {
-            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .toast-slide-enter-from, .toast-slide-leave-to {
-            opacity: 0;
-            transform: translateY(-20px);
-        }
-        
-        .fade-slide-enter-active, .fade-slide-leave-active {
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .fade-slide-enter-from, .fade-slide-leave-to {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-
-        /* Interactive Buttons */
-        .btn-interactive {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .btn-interactive:hover:not(:disabled) {
-            transform: translateY(-2px) scale(1.02);
-        }
-        .btn-interactive:active:not(:disabled) {
-            transform: scale(0.96);
-        }
-        button:disabled { opacity: 0.55; cursor: not-allowed; }
     </style>
 </head>
-<body class="min-h-screen text-slate-200 font-sans antialiased overflow-x-hidden">
-    <div id="app" v-cloak class="min-h-screen flex flex-col p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto gap-6">
-        
-        <!-- Global Toast Notification -->
-        <transition name="toast-slide">
-            <div v-if="toast.show" 
-                 class="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] w-max max-w-[calc(100vw-2rem)] px-6 py-3 rounded-2xl flex items-center gap-3 backdrop-blur-md shadow-2xl border transition-all"
-                 :class="toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400/50 text-white' : 'bg-rose-500/90 border-rose-400/50 text-white'">
-                
-                <svg v-if="toast.type === 'success'" class="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                <svg v-else class="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                
-                <span class="font-medium break-words min-w-0">{{ toast.message }}</span>
-                <button @click="toast.show = false" class="ml-2 hover:opacity-75 transition-opacity">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+<body>
+    <!-- Icon set: thin, rounded strokes in the spirit of SF Symbols -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+        <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+        <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+        <symbol id="i-updown" viewBox="0 0 24 24"><path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4"/></symbol>
+        <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5.5M6 11.5l6-6 6 6"/></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l.9 11.4A2 2 0 008.9 20h6.2a2 2 0 002-1.6L18 7M9 7V4.5h6V7"/></symbol>
+        <symbol id="i-retry" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 11-2.3-5.4M19.5 4.5v4.3h-4.3"/></symbol>
+        <symbol id="i-gear" viewBox="0 0 24 24"><path d="M10.3 4.3c.4-1.8 2.9-1.8 3.4 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001.1 2.5c1.8.4 1.8 2.9 0 3.4a1.7 1.7 0 00-1.1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 00-2.5 1.1c-.4 1.8-2.9 1.8-3.4 0a1.7 1.7 0 00-2.6-1.1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 00-1.1-2.5c-1.8-.4-1.8-2.9 0-3.4a1.7 1.7 0 001.1-2.6c-.9-1.5.8-3.3 2.4-2.4 1 .6 2.3.1 2.5-1.1z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4.5H6.5a2 2 0 00-2 2v11a2 2 0 002 2H10M15 8l4 4-4 4M19 12H9.5"/></symbol>
+        <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9.5" cy="8" r="3.5"/><path d="M3.5 19.5v-1a4.5 4.5 0 014.5-4.5h3a4.5 4.5 0 014.5 4.5v1M16 4.7a3.5 3.5 0 010 6.6M20.5 19.5v-1a4.5 4.5 0 00-3-4.2"/></symbol>
+        <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15.5" r="3.5"/><path d="M10.6 12.9L19.5 4M15.5 8l2.5 2.5"/></symbol>
+        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10.5 13.5a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M13.5 10.5a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></symbol>
+        <symbol id="i-video" viewBox="0 0 24 24"><path d="M3.5 8.5a2.5 2.5 0 012.5-2.5h7a2.5 2.5 0 012.5 2.5v7a2.5 2.5 0 01-2.5 2.5H6a2.5 2.5 0 01-2.5-2.5zM16 10.5l4.5-2.6v8.2L16 13.5"/></symbol>
+        <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6.5l10-2V16"/><circle cx="6.8" cy="18" r="2.2"/><circle cx="16.8" cy="16" r="2.2"/></symbol>
+        <symbol id="i-playlist" viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h9.5M4 17.5h6M16.5 14.2v6l5-3z"/></symbol>
+        <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4.2l9 15.8H3zM12 10v4.2M12 17h.01"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+        <symbol id="i-exclaim" viewBox="0 0 24 24"><path d="M12 6.5v7M12 17.5h.01"/></symbol>
+        <symbol id="i-external" viewBox="0 0 24 24"><path d="M8 16l8.5-8.5M9 7.5h7.5V15"/></symbol>
+        <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 7.5h16v3H4zM5.5 10.5V18a1.5 1.5 0 001.5 1.5h10a1.5 1.5 0 001.5-1.5v-7.5M10 14h4"/></symbol>
+    </svg>
+
+    <div id="app" v-cloak>
+
+        <!-- Toast -->
+        <transition name="toast">
+            <div v-if="toast.show" class="toast" :class="{ 'is-error': toast.type !== 'success' }" role="status" aria-live="polite">
+                <span class="toast-ico">
+                    <svg v-if="toast.type === 'success'" class="ico"><use href="#i-check"></use></svg>
+                    <svg v-else class="ico"><use href="#i-exclaim"></use></svg>
+                </span>
+                <span class="toast-msg">{{ toast.message }}</span>
+                <button class="toast-x" @click="toast.show = false" aria-label="關閉通知"><svg class="ico ico-sm"><use href="#i-x"></use></svg></button>
             </div>
         </transition>
 
-        <!-- Auth Overlay -->
-        <div v-if="!isAuthenticated" class="fixed overflow-y-auto inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div class="glass-panel p-8 rounded-2xl w-full max-w-sm border-t border-white/20">
-                <h2 class="text-2xl font-bold mb-6 text-center text-white flex items-center justify-center gap-2">
-                    <svg class="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                    系統登入
-                </h2>
-                <form v-if="authConfig.password_enabled !== false" @submit.prevent="login('password')" class="space-y-3 mb-5">
-                    <label class="block text-sm text-slate-300">帳號
-                        <input v-model="usernameInput" autocomplete="username" required class="w-full mt-2 glass-input rounded-xl p-3" placeholder="管理者提供的帳號">
-                    </label>
-                    <label class="block text-sm text-slate-300">密碼
-                        <input v-model="passwordInput" type="password" autocomplete="current-password" required class="w-full mt-2 glass-input rounded-xl p-3" placeholder="請輸入密碼">
-                    </label>
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 rounded-xl">帳號登入</button>
+        <!-- Sign in -->
+        <main v-if="!isAuthenticated" class="auth">
+            <div class="auth-inner">
+                <span class="icon-frame auth-icon"><img src="/favicon.svg?v=2" alt="" class="app-icon"></span>
+                <h1>登入</h1>
+                <p class="sub">通用媒體下載工具</p>
+
+                <form v-if="authConfig.password_enabled !== false" @submit.prevent="login('password')">
+                    <div class="group">
+                        <label class="row"><span class="sr-only">帳號</span>
+                            <input v-model="usernameInput" autocomplete="username" required placeholder="帳號" autocapitalize="none" spellcheck="false">
+                        </label>
+                        <label class="row"><span class="sr-only">密碼</span>
+                            <input v-model="passwordInput" type="password" autocomplete="current-password" required placeholder="密碼">
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">登入</button>
                 </form>
-                <details v-if="authConfig.token_enabled" class="mb-4">
-                    <summary class="text-sm text-indigo-300 cursor-pointer mb-3">管理者 Token 登入</summary>
-                <template v-if="authConfig.token_enabled">
-                <input v-model="tokenInput" @keyup.enter="login" type="password" placeholder="請輸入 AUTH_TOKEN" class="w-full glass-input rounded-xl p-3 mb-6 transition-all">
-                <button @click="login" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] text-white font-medium py-3 rounded-xl btn-interactive flex items-center justify-center gap-2">
-                    <span>登入系統</span>
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                </button>
-                </template>
-                </details>
-                <button v-if="authConfig.sso_enabled" @click="loginSso" class="w-full mt-4 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 rounded-xl">
-                    使用 {{ authConfig.sso_name }} 登入
-                </button>
-                <p v-if="authError" class="text-rose-400 mt-4 text-center text-sm bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">{{ authError }}</p>
+
+                <div class="auth-alt">
+                    <button v-if="authConfig.sso_enabled" @click="loginSso" class="btn btn-gray btn-block">使用 {{ authConfig.sso_name }} 登入</button>
+                    <details v-if="authConfig.token_enabled">
+                        <summary>使用管理者 Token</summary>
+                        <div class="disclosure-body">
+                            <div class="group">
+                                <label class="row"><span class="sr-only">AUTH_TOKEN</span>
+                                    <input v-model="tokenInput" @keyup.enter="login" type="password" placeholder="AUTH_TOKEN" style="flex:1;min-width:0;border:0;background:none;height:48px;font-size:16px">
+                                </label>
+                            </div>
+                            <button @click="login" class="btn btn-primary btn-block">以 Token 登入</button>
+                        </div>
+                    </details>
+                </div>
+                <p v-if="authError" class="auth-error" role="alert" :key="authError">{{ authError }}</p>
             </div>
-        </div>
+        </main>
 
         <template v-else>
-            <!-- Header -->
-            <header class="glass-panel p-5 px-6 rounded-2xl flex flex-wrap gap-3 justify-between items-center shrink-0 border-t border-white/20">
-                <div class="flex items-center gap-3">
-                    <img src="/favicon.svg" alt="App Icon" class="w-10 h-10 shadow-lg rounded-xl">
-                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">通用媒體下載</h1>
-                </div>
-                <div class="flex gap-2 flex-wrap justify-end">
-                    <button v-if="isAdmin" @click="openUsers" aria-label="使用者管理" class="glass-panel hover:bg-white/10 text-slate-200 px-3 py-2 rounded-xl text-sm">使用者</button>
-                    <button @click="openSites" aria-label="Cookies 設定" class="glass-panel hover:bg-white/10 text-slate-200 px-3 py-2 rounded-xl text-sm">Cookies 設定</button>
-                    <button v-if="isAdmin" aria-label="設定" @click="openSettings" class="glass-panel hover:bg-white/10 text-slate-200 px-4 py-2 rounded-xl btn-interactive flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        <span class="hidden sm:inline">設定</span>
-                    </button>
-                    <button aria-label="登出" @click="logout" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-4 py-2 rounded-xl btn-interactive flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                        <span class="hidden sm:inline">登出</span>
-                    </button>
+            <!-- Navigation -->
+            <header class="nav">
+                <div class="nav-inner">
+                    <div class="brand">
+                        <span class="icon-frame brand-icon"><img src="/favicon.svg?v=2" alt="" class="app-icon"></span>
+                        <span>通用媒體下載</span>
+                    </div>
+                    <nav class="nav-actions">
+                        <button v-if="isAdmin" @click="openUsers" aria-label="使用者管理" class="nav-btn"><svg class="ico"><use href="#i-users"></use></svg><span>使用者</span></button>
+                        <button @click="openSites" aria-label="Cookies 設定" class="nav-btn"><svg class="ico"><use href="#i-key"></use></svg><span>Cookies</span></button>
+                        <button v-if="isAdmin" @click="openSettings" aria-label="設定" class="nav-btn"><svg class="ico"><use href="#i-gear"></use></svg><span>設定</span></button>
+                        <button @click="logout" aria-label="登出" class="nav-btn"><svg class="ico"><use href="#i-logout"></use></svg><span>登出</span></button>
+                    </nav>
                 </div>
             </header>
 
-            <div class="glass-panel rounded-xl px-5 py-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span class="text-slate-300">{{ currentUser?.name }} · {{ isAdmin ? '管理者' : '一般使用者' }}</span>
-                <span class="text-indigo-300">{{ quotaText }}<span v-if="!isAdmin" class="text-slate-400"> · 已完成 {{ quota.used }} · 預留 {{ quota.reserved }}</span></span>
-            </div>
+            <main class="wrap">
+                <section class="hero">
+                    <h1>貼上連結，<br>開始下載。</h1>
+                    <p>支援影片網站、HLS、DASH 與媒體直連。</p>
+                </section>
 
-            <!-- Main Layout: Two Columns -->
-            <div class="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
+                <div class="stack">
+                    <!-- Composer -->
+                    <section class="composer reveal" style="--i:1">
+                        <div class="url-wrap" :class="{ busy: isParsing }">
+                            <div class="url-field">
+                                <svg class="ico"><use href="#i-link"></use></svg>
+                                <input v-model="url" @keyup.enter="parseUrl" type="text" inputmode="url" autocapitalize="none" spellcheck="false" aria-label="影片連結" placeholder="影片網站、m3u8、MPD 或媒體直連…">
+                                <button @click="parseUrl" :disabled="isParsing || !url" class="send" aria-label="解析網址" title="解析網址">
+                                    <span v-if="isParsing" class="spinner"></span>
+                                    <svg v-else class="ico"><use href="#i-arrow-up"></use></svg>
+                                </button>
+                            </div>
+                        </div>
 
-                <!-- Left Column: Input & Parse Results -->
-                <div class="lg:w-[45%] flex flex-col gap-6 relative z-10">
+                        <div class="chips">
+                            <div class="menu-anchor">
+                                <button type="button" class="chip" @click="toggleChip('video', $event)" aria-haspopup="menu" :aria-expanded="openChip === 'video'" aria-label="影片輸出格式">
+                                    <span>影片</span><span class="chip-value">{{ outputLabels[outputFormat] }}</span><svg class="ico"><use href="#i-updown"></use></svg>
+                                </button>
+                                <transition name="menu">
+                                    <ul v-if="openChip === 'video'" class="menu menu-chip" role="menu" @click.stop>
+                                        <li v-for="opt in ['mp4', 'mkv', 'original']" :key="opt" role="menuitem" tabindex="0" @click="outputFormat = opt; closeDropdowns()" @keyup.enter="outputFormat = opt; closeDropdowns()" :class="{ selected: outputFormat === opt }"><span>{{ outputLabels[opt] }}</span><svg v-if="outputFormat === opt" class="ico"><use href="#i-check"></use></svg></li>
+                                    </ul>
+                                </transition>
+                            </div>
+                            <div class="menu-anchor">
+                                <button type="button" class="chip" @click="toggleChip('audio', $event)" aria-haspopup="menu" :aria-expanded="openChip === 'audio'" aria-label="音訊輸出格式">
+                                    <span>音訊</span><span class="chip-value">{{ audioLabels[audioFormat] }}</span><svg class="ico"><use href="#i-updown"></use></svg>
+                                </button>
+                                <transition name="menu">
+                                    <ul v-if="openChip === 'audio'" class="menu menu-chip" role="menu" @click.stop>
+                                        <li v-for="opt in ['mp3', 'm4a']" :key="opt" role="menuitem" tabindex="0" @click="audioFormat = opt; closeDropdowns()" @keyup.enter="audioFormat = opt; closeDropdowns()" :class="{ selected: audioFormat === opt }"><span>{{ audioLabels[opt] }}</span><svg v-if="audioFormat === opt" class="ico"><use href="#i-check"></use></svg></li>
+                                    </ul>
+                                </transition>
+                            </div>
+                        </div>
 
-                    <!-- Main Input Area -->
-                    <div class="glass-panel p-6 rounded-2xl border-t border-white/20">
-                        <label class="block text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                            <svg class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-                            影片連結
-                        </label>
-                        <div class="flex flex-col sm:flex-row gap-3">
-                            <input v-model="url" @keyup.enter="parseUrl" type="text" placeholder="影片網站、m3u8、MPD 或媒體直連…" class="flex-1 glass-input rounded-xl p-3 transition-all placeholder-slate-500">
-                            <button @click="parseUrl" :disabled="isParsing || !url" class="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:shadow-none hover:shadow-[0_0_15px_rgba(79,70,229,0.4)] text-white px-6 py-3 rounded-xl btn-interactive whitespace-nowrap font-medium flex items-center justify-center gap-2">
-                                <template v-if="isParsing">
-                                    <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    解析中...
-                                </template>
-                                <template v-else>
-                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                                    解析網址
-                                </template>
-                            </button>
-                        </div>
-                        <div class="flex flex-wrap gap-3 items-center mt-3">
-                            <button @click="openSites" class="text-sm px-3 py-2 rounded-lg border border-indigo-400/40 text-indigo-300 hover:bg-indigo-500/10">cookies.txt 使用教學與匯入</button>
-                            <p class="text-xs text-slate-400">影片需要登入才能觀看時，請匯入自己瀏覽器匯出的 cookies.txt。</p>
-                        </div>
-                        <div v-if="loginRequiredUrl && loginRequiredUrl === url.trim()" class="mt-4 p-4 rounded-xl border border-amber-400/30 bg-amber-500/10 space-y-3">
-                            <p class="text-sm text-amber-200">來源可能需要登入。請依教學匯入 cookies.txt，再按「解析網址」重試。</p>
-                            <button @click="openSites" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-4 py-2 text-sm text-white">查看教學並匯入 cookies.txt</button>
-                        </div>
-                    </div>
+                        <p v-if="quota.limit !== null" class="caption center tnum quota">{{ quotaText }} · 已完成 {{ quota.used }} · 預留 {{ quota.reserved }}</p>
 
-                    <div class="glass-panel p-5 rounded-2xl space-y-4">
-                        <div class="grid grid-cols-2 gap-3">
-                            <label class="text-sm text-slate-300">影片輸出
-                                <select v-model="outputFormat" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
-                                    <option value="mp4">MP4</option><option value="mkv">MKV</option><option value="original">保留原始容器</option>
-                                </select>
-                            </label>
-                            <label class="text-sm text-slate-300">音訊輸出
-                                <select v-model="audioFormat" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
-                                    <option value="mp3">MP3</option><option value="m4a">M4A</option>
-                                </select>
-                            </label>
-                        </div>
-                        <details>
-                            <summary class="text-sm text-indigo-300 cursor-pointer">串流來源進階選項</summary>
-                            <div class="space-y-3 mt-3">
-                                <label class="block text-sm text-slate-300">來源網頁（Referer）
-                                    <input v-model="referer" type="url" placeholder="播放影片的網頁網址，選填" class="w-full mt-2 glass-input rounded-xl p-3">
+                        <details class="adv">
+                            <summary class="adv-sum">更多選項<svg class="ico ico-sm chev"><use href="#i-chevron-right"></use></svg></summary>
+                            <div class="disclosure-body group">
+                                <div class="row"><p class="caption">影片需要登入才能觀看時，請匯入自己瀏覽器匯出的 cookies.txt。<button @click="openSites" class="link">使用教學與匯入</button></p></div>
+                                <label class="row"><span class="row-title">來源網頁</span>
+                                    <input v-model="referer" type="url" placeholder="Referer，選填" class="row-input" aria-label="來源網頁（Referer）">
                                 </label>
-                                <label class="block text-sm text-slate-300">瀏覽器識別（User-Agent）
-                                    <input v-model="userAgent" placeholder="選填" class="w-full mt-2 glass-input rounded-xl p-3">
+                                <label class="row"><span class="row-title">瀏覽器識別</span>
+                                    <input v-model="userAgent" placeholder="User-Agent，選填" class="row-input" aria-label="瀏覽器識別（User-Agent）">
                                 </label>
-                                <p class="text-xs text-slate-400">若串流有來源限制，請使用播放頁面的資訊。解析與下載都會套用。</p>
+                                <div class="row"><p class="caption">若串流有來源限制，請使用播放頁面的資訊，解析與下載都會套用。支援 yt-dlp 可解析的網站、HLS（m3u8／TS）、DASH（MPD）與媒體直連。MP4／MKV 會重新封裝，遇到編碼不相容可改選 MKV。</p></div>
                             </div>
                         </details>
-                        <p class="text-xs text-slate-400">支援 yt-dlp 可解析的網站、HLS（m3u8／TS）、DASH（MPD）與媒體直連。MP4／MKV 會重新封裝，遇到編碼不相容可改選 MKV。</p>
+
+                        <div v-if="loginRequiredUrl && loginRequiredUrl === url.trim()" class="callout callout-warn" style="width:100%" role="alert">
+                            <svg class="ico"><use href="#i-warn"></use></svg>
+                            <div>
+                                <p>來源可能需要登入。請依教學匯入 cookies.txt，再按解析重試。</p>
+                                <div class="callout-actions"><button @click="openSites" class="btn btn-sm btn-primary">查看教學並匯入 cookies.txt</button></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Parse result -->
+                    <transition name="result">
+                        <section v-if="parseResult" class="result">
+                            <p v-if="sourceChanged" class="callout callout-warn" style="margin-bottom:14px"><svg class="ico"><use href="#i-warn"></use></svg><span>來源已變更，請重新解析後再下載。</span></p>
+                            <p v-if="parseResult.warning" class="callout callout-warn" style="margin-bottom:14px"><svg class="ico"><use href="#i-warn"></use></svg><span>{{ parseResult.warning }}</span></p>
+
+                            <!-- Playlist -->
+                            <template v-if="parseResult.is_playlist">
+                                <div class="media-head">
+                                    <div class="tile"><svg class="ico"><use href="#i-playlist"></use></svg></div>
+                                    <div style="min-width:0">
+                                        <h2 class="media-title" :title="parseResult.title">{{ parseResult.title }}</h2>
+                                        <p class="media-sub">播放清單 · 共 {{ parseResult.item_count }} 首</p>
+                                    </div>
+                                </div>
+
+                                <div class="group flat has-menu">
+                                    <label class="row row-tap check-row">
+                                        <span class="row-title">全選</span>
+                                        <span style="display:inline-flex"><input type="checkbox" v-model="selectAll" class="sr-only"><span class="check"><svg class="ico"><use href="#i-check"></use></svg></span></span>
+                                    </label>
+                                    <div class="row row-tap" @click="toggleBatchDropdown" role="button" tabindex="0" @keyup.enter="toggleBatchDropdown" aria-haspopup="menu" :aria-expanded="isBatchDropdownOpen">
+                                        <span class="row-title">下載內容</span>
+                                        <span class="menu-anchor">
+                                            <span class="row-value" style="color:var(--accent);display:inline-flex;align-items:center;gap:4px">{{ batchDownloadFormat === 'video' ? '自動最佳畫質' : '純音訊' }}<svg class="ico" style="width:14px;height:14px"><use href="#i-updown"></use></svg></span>
+                                            <transition name="menu">
+                                                <ul v-if="isBatchDropdownOpen" class="menu" role="menu" @click.stop>
+                                                    <li role="menuitem" tabindex="0" @click="selectBatchFormat('video')" @keyup.enter="selectBatchFormat('video')" :class="{ selected: batchDownloadFormat === 'video' }"><span>自動最佳畫質</span><svg v-if="batchDownloadFormat === 'video'" class="ico"><use href="#i-check"></use></svg></li>
+                                                    <li role="menuitem" tabindex="0" @click="selectBatchFormat('audio')" @keyup.enter="selectBatchFormat('audio')" :class="{ selected: batchDownloadFormat === 'audio' }"><span>純音訊</span><svg v-if="batchDownloadFormat === 'audio'" class="ico"><use href="#i-check"></use></svg></li>
+                                                </ul>
+                                            </transition>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="entries">
+                                    <label v-for="(item, index) in parseResult.entries" :key="index" class="entry" :class="{ on: item.selected }">
+                                        <input type="checkbox" v-model="item.selected" class="sr-only"><span class="check"><svg class="ico"><use href="#i-check"></use></svg></span>
+                                        <span class="num tnum">{{ index + 1 }}</span>
+                                        <span class="t truncate">{{ item.title }}</span>
+                                    </label>
+                                </div>
+
+                                <button @click="startBatchDownload" :disabled="sourceChanged || selectedCount === 0" class="btn btn-primary btn-block" style="margin-top:20px;height:52px">
+                                    <svg class="ico"><use href="#i-download"></use></svg>下載選取的 {{ selectedCount }} 首歌曲
+                                </button>
+                            </template>
+
+                            <!-- Single item -->
+                            <template v-else>
+                                <div class="media-head">
+                                    <div class="tile"><svg class="ico"><use :href="parseResult.has_video ? '#i-video' : '#i-music'"></use></svg></div>
+                                    <h2 class="media-title" :title="parseResult.title">{{ parseResult.title }}</h2>
+                                </div>
+
+                                <div class="group flat has-menu">
+                                    <div class="row row-tap" @click="toggleFormatDropdown" role="button" tabindex="0" @keyup.enter="toggleFormatDropdown" aria-haspopup="menu" :aria-expanded="isFormatDropdownOpen">
+                                        <span class="row-title">下載格式</span>
+                                        <span class="menu-anchor" style="min-width:0">
+                                            <span class="row-value truncate" style="color:var(--accent);display:inline-flex;align-items:center;gap:4px;max-width:100%"><span class="truncate">{{ getFormatText }}</span><svg class="ico" style="width:14px;height:14px"><use href="#i-updown"></use></svg></span>
+                                            <transition name="menu">
+                                                <ul v-if="isFormatDropdownOpen" class="menu" role="menu" @click.stop>
+                                                    <li role="menuitem" tabindex="0" @click="selectFormat('audio_only')" @keyup.enter="selectFormat('audio_only')" :class="{ selected: selectedFormat === 'audio_only' }"><span>純音訊</span><svg v-if="selectedFormat === 'audio_only'" class="ico"><use href="#i-check"></use></svg></li>
+                                                    <li v-if="parseResult.has_video" role="menuitem" tabindex="0" @click="selectFormat('best')" @keyup.enter="selectFormat('best')" :class="{ selected: selectedFormat === 'best' }"><span>自動最佳畫質</span><svg v-if="selectedFormat === 'best'" class="ico"><use href="#i-check"></use></svg></li>
+                                                    <template v-if="parseResult.video_formats && parseResult.video_formats.length">
+                                                        <hr>
+                                                        <li class="menu-label">影片畫質</li>
+                                                        <li v-for="fmt in parseResult.video_formats" :key="fmt.id" role="menuitem" tabindex="0" @click="selectFormat(fmt.id)" @keyup.enter="selectFormat(fmt.id)" :class="{ selected: selectedFormat === fmt.id }">
+                                                            <span>{{ fmt.resolution }} · {{ fmt.ext }} · {{ fmt.id }}{{ fmt.fps ? ` · ${fmt.fps}fps` : '' }}</span>
+                                                            <svg v-if="selectedFormat === fmt.id" class="ico"><use href="#i-check"></use></svg>
+                                                        </li>
+                                                    </template>
+                                                </ul>
+                                            </transition>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <button @click="startDownload" :disabled="sourceChanged" class="btn btn-primary btn-block" style="margin-top:20px;height:52px">
+                                    <svg class="ico"><use href="#i-download"></use></svg>加入下載佇列
+                                </button>
+                            </template>
+                        </section>
+                    </transition>
+
+                </div>
+
+                <!-- Tasks -->
+                <section class="stack" style="margin-top:80px; gap:20px">
+                    <div class="section-head">
+                        <div>
+                            <h2>下載任務<small class="tnum">{{ tasks.length }}</small></h2>
+                            <p class="caption tnum" style="margin-top:4px">進行中 {{ activeDownloads }} / {{ config.max_concurrent_downloads }} · 排隊 {{ tasks.filter(t => t.state === 'QUEUED').length }}</p>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                            <span v-if="!wsConnected" class="conn" role="status"><span class="dot"></span>連線中斷，正在重新連線</span>
+                            <button @click="downloadAll" :disabled="completedCount === 0" class="btn btn-sm btn-tinted"><svg class="ico ico-sm"><use href="#i-archive"></use></svg>下載 ZIP（{{ completedCount }}）</button>
+                        </div>
                     </div>
 
-                    <!-- Parse Results -->
-                    <transition name="slide-up">
-                        <div v-if="parseResult" class="glass-panel p-6 rounded-2xl border-t border-white/20 bg-gradient-to-b from-white/5 to-transparent">
-                            <p v-if="sourceChanged" class="text-sm text-amber-300 mb-4">來源已變更，請重新解析後再下載。</p>
-                            <p v-if="parseResult.warning" class="text-sm text-amber-300 mb-4">{{ parseResult.warning }}</p>
-                            <template v-if="parseResult.is_playlist">
-                                <div class="flex items-start gap-4 mb-5 pb-5 border-b border-white/10">
-                                    <div class="bg-white/10 p-3 rounded-xl shrink-0">
-                                        <svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                                    </div>
-                                    <div class="flex-1 min-w-0">
-                                        <h3 class="font-bold text-lg text-white truncate leading-tight pt-1" :title="parseResult.title">{{ parseResult.title }}</h3>
+                    <div v-if="tasks.length === 0" class="empty">
+                        <svg class="ico"><use href="#i-download"></use></svg>
+                        <b>尚無下載任務</b>
+                        <span>解析連結並加入佇列後，任務會顯示在這裡。</span>
+                    </div>
 
-                                        <div class="flex flex-wrap justify-between items-center mt-2 gap-3">
-                                            <label class="flex items-center gap-2 cursor-pointer group relative">
-                                                <input type="checkbox" v-model="selectAll" class="peer hidden">
-                                                <div class="w-5 h-5 rounded flex items-center justify-center transition-all duration-300
-                                                            bg-white/5 border border-white/20
-                                                            peer-checked:bg-gradient-to-br peer-checked:from-indigo-500 peer-checked:to-purple-500 peer-checked:border-indigo-400/50 shadow-sm">
-                                                    <svg class="w-3.5 h-3.5 text-white opacity-0 scale-50 peer-checked:opacity-100 peer-checked:scale-110 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                                                </div>
-                                                <span class="text-sm text-indigo-300 group-hover:text-indigo-200 transition-colors">全選 (共 {{ parseResult.item_count }} 首)</span>
-                                            </label>
-                                            <div class="relative">
-                                                <div @click="toggleBatchDropdown" class="glass-input rounded-lg px-3 py-1.5 text-sm cursor-pointer border border-white/20 bg-slate-800/80 hover:bg-slate-700/80 transition-colors flex items-center justify-between gap-2 min-w-[160px]">
-                                                    <span class="font-medium">{{ batchDownloadFormat === 'video' ? '🎬 自動最佳畫質' : '🎵 純音訊' }}</span>
-                                                    <svg class="w-4 h-4 text-slate-400 transition-transform duration-300" :class="{ 'rotate-180': isBatchDropdownOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                                </div>
-                                                <transition name="fade-slide">
-                                                    <ul v-if="isBatchDropdownOpen" class="absolute z-50 right-0 mt-1.5 w-48 bg-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl py-1 overflow-hidden">
-                                                        <li @click="selectBatchFormat('video')" class="px-4 py-2 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2" :class="{ 'bg-white/5 text-indigo-300 font-medium': batchDownloadFormat === 'video' }">
-                                                            <span class="flex-1">🎬 自動最佳畫質</span>
-                                                            <svg v-if="batchDownloadFormat === 'video'" class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                        </li>
-                                                        <li @click="selectBatchFormat('audio')" class="px-4 py-2 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2" :class="{ 'bg-white/5 text-indigo-300 font-medium': batchDownloadFormat === 'audio' }">
-                                                            <span class="flex-1">🎵 純音訊</span>
-                                                            <svg v-if="batchDownloadFormat === 'audio'" class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                        </li>
-                                                    </ul>
-                                                </transition>
-                                            </div>
-                                        </div>
+                    <transition-group name="list" tag="div" class="tasks" :class="{ 'is-empty': tasks.length === 0 }">
+                        <article v-for="task in reversedTasks" :key="task.task_id" class="task">
+                            <div class="task-main">
+                                <div class="state-ico" :class="'st-' + task.state">
+                                    <svg v-if="task.state === 'COMPLETED'" :key="'c'" class="ico"><use href="#i-check"></use></svg>
+                                    <svg v-else-if="task.state === 'ERROR'" :key="'e'" class="ico"><use href="#i-exclaim"></use></svg>
+                                    <svg v-else-if="task.state === 'DOWNLOADING'" :key="'d'" class="ico"><use href="#i-arrow-up" style="transform-origin:center;transform:rotate(180deg)"></use></svg>
+                                    <span v-else-if="task.state === 'PROCESSING'" :key="'p'" class="spinner"></span>
+                                    <svg v-else :key="'q'" class="ico"><use href="#i-clock"></use></svg>
+                                </div>
+                                <div class="task-info">
+                                    <h3 class="task-title truncate" :title="task.title">{{ task.title }}</h3>
+                                    <div class="task-meta tnum">
+                                        <span :class="'s-' + task.state">{{ getStatusText(task.state) }}<template v-if="task.state === 'DOWNLOADING'">&nbsp;{{ Math.floor(task.progress || 0) }}%</template></span>
+                                        <span>{{ task.output_format === 'original' ? '原始容器' : (task.output_format || 'mp4').toUpperCase() }}</span>
+                                        <span v-if="task.state === 'DOWNLOADING'">{{ task.speed || '計算中…' }}</span>
+                                        <span v-if="task.state === 'DOWNLOADING'">剩餘 {{ task.eta || '--' }}</span>
                                     </div>
                                 </div>
-                                <div class="flex flex-col gap-4">
-                                    <div class="max-h-64 overflow-y-auto glass-input rounded-xl p-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-                                        <div v-for="(item, index) in parseResult.entries" :key="index"
-                                             @click="item.selected = !item.selected"
-                                             class="flex items-center gap-3 text-sm text-slate-300 truncate py-2 px-2 border-b border-white/5 last:border-0 hover:bg-white/5 rounded-lg transition-colors cursor-pointer group">
-                                            <label class="relative flex items-center shrink-0 cursor-pointer" @click.stop>
-                                                <input type="checkbox" v-model="item.selected" class="peer hidden">
-                                                <div class="w-4 h-4 rounded flex items-center justify-center transition-all duration-300
-                                                            bg-white/5 border border-white/20
-                                                            peer-checked:bg-gradient-to-br peer-checked:from-indigo-500 peer-checked:to-purple-500 peer-checked:border-indigo-400/50 shadow-sm">
-                                                    <svg class="w-3 h-3 text-white opacity-0 scale-50 peer-checked:opacity-100 peer-checked:scale-110 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                                                </div>
-                                            </label>
-                                            <span class="truncate flex-1 transition-colors" :class="{'text-white font-medium': item.selected, 'text-slate-400 group-hover:text-slate-300': !item.selected}">{{ index + 1 }}. {{ item.title }}</span>
-                                        </div>
-                                    </div>
-                                    <button @click="startBatchDownload" :disabled="sourceChanged || selectedCount === 0" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:shadow-none text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2 transition-all">
-                                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                        下載選取的 {{ selectedCount }} 首歌曲
-                                    </button>
+                                <div class="task-actions">
+                                    <button v-if="task.state === 'COMPLETED'" @click="downloadFile(task)" title="下載至電腦" aria-label="下載至電腦" class="btn-icon is-accent"><svg class="ico"><use href="#i-download"></use></svg></button>
+                                    <button v-if="task.state === 'ERROR'" @click="retryTask(task)" title="重試任務" aria-label="重試任務" class="btn-icon is-accent"><svg class="ico"><use href="#i-retry"></use></svg></button>
+                                    <button :disabled="['DOWNLOADING', 'PROCESSING'].includes(task.state)" @click="deleteTask(task.task_id)" title="刪除任務" aria-label="刪除任務" class="btn-icon"><svg class="ico"><use href="#i-trash"></use></svg></button>
                                 </div>
-                            </template>
-                            <template v-else>
-                                <div class="flex items-start gap-4 mb-5 pb-5 border-b border-white/10">
-                                    <div class="bg-white/10 p-3 rounded-xl shrink-0">
-                                        <svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                                    </div>
-                                    <h3 class="font-bold text-lg text-white truncate leading-tight pt-1" :title="parseResult.title">{{ parseResult.title }}</h3>
-                                </div>
+                            </div>
 
-                                <div class="flex flex-col gap-4">
-                                    <div class="flex-1 relative">
-                                        <label class="block text-sm font-medium text-slate-400 mb-2">請選擇下載格式：</label>
-                                        <div @click="toggleFormatDropdown" class="w-full glass-input rounded-xl p-3 cursor-pointer hover:border-indigo-500/50 transition-all flex items-center justify-between gap-2 group">
-                                            <span class="font-medium text-slate-200 group-hover:text-white transition-colors">{{ getFormatText }}</span>
-                                            <svg class="w-5 h-5 text-slate-400 group-hover:text-indigo-400 transition-all duration-300" :class="{ 'rotate-180 text-indigo-400': isFormatDropdownOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                        </div>
-                                        
-                                        <transition name="fade-slide">
-                                            <ul v-if="isFormatDropdownOpen" class="absolute z-50 left-0 right-0 mt-2 bg-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl py-2 max-h-60 overflow-y-auto custom-scrollbar">
-                                                <li @click="selectFormat('audio_only')" class="px-4 py-2.5 text-sm text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2 border-b border-white/5 pb-3 mb-1" :class="{ 'bg-white/5 text-indigo-300 font-medium': selectedFormat === 'audio_only' }">
-                                                    <span class="flex-1">🎵 純音訊</span>
-                                                    <svg v-if="selectedFormat === 'audio_only'" class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                </li>
-                                                <li v-if="parseResult.has_video" @click="selectFormat('best')" class="px-4 py-3 text-sm cursor-pointer hover:bg-white/10 text-indigo-300">🎬 自動最佳畫質</li>
-                                                <li class="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider select-none">
-                                                    🎬 影片畫質
-                                                </li>
-                                                <li v-for="fmt in parseResult.video_formats" :key="fmt.id" 
-                                                    @click="selectFormat(fmt.id)" 
-                                                    class="px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-2"
-                                                    :class="{ 'bg-white/5 text-indigo-300 font-medium': selectedFormat === fmt.id }">
-                                                    <span class="flex-1">{{ fmt.resolution }} · {{ fmt.ext }} · {{ fmt.id }}{{ fmt.fps ? ` · ${fmt.fps}fps` : '' }}</span>
-                                                    <svg v-if="selectedFormat === fmt.id" class="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                </li>
+                            <div v-if="['QUEUED', 'DOWNLOADING', 'PROCESSING'].includes(task.state)" class="bar" role="progressbar" :aria-valuenow="Math.floor(task.progress || 0)" aria-valuemin="0" aria-valuemax="100">
+                                <div class="bar-fill" :class="getProgressBarClass(task.state)" :style="{ width: (task.state === 'PROCESSING' ? 100 : (task.progress || 0)) + '%' }"></div>
+                            </div>
+
+                            <div v-if="task.state === 'ERROR'" class="task-error">
+                                {{ task.error_msg }}
+                                <template v-if="task.login_required">
+                                    <div><button @click="openSites" class="btn btn-sm btn-tinted">查看教學並匯入 cookies.txt</button></div>
+                                    <p class="hint">匯入後，按此任務的「重試」按鈕。</p>
+                                </template>
+                            </div>
+                        </article>
+                    </transition-group>
+                </section>
+            </main>
+
+            <!-- Settings -->
+            <transition name="sheet">
+                <div v-if="showSettings && isAdmin" class="overlay" @click.self="showSettings = false">
+                    <div class="sheet" role="dialog" aria-modal="true" aria-label="系統設定">
+                        <div class="sheet-head">
+                            <h2>系統設定</h2>
+                            <button aria-label="關閉設定" @click="showSettings = false" class="btn-icon"><svg class="ico ico-sm"><use href="#i-x"></use></svg></button>
+                        </div>
+
+                        <div class="sheet-body">
+                            <section class="sheet-section">
+                                <h3>下載</h3>
+                                <div class="group group-surface">
+                                    <label class="row"><span class="row-title">最大同時下載數</span>
+                                        <input aria-label="最大同時下載數" v-model.number="tempConfig.max_concurrent_downloads" type="number" min="1" max="10" class="row-input tnum" style="color:var(--accent)">
+                                    </label>
+                                    <label class="row"><span class="row-title">每部影片的分段連線數</span>
+                                        <input aria-label="每部影片的分段連線數" v-model.number="tempConfig.concurrent_fragments" type="number" min="1" max="16" class="row-input tnum" style="color:var(--accent)">
+                                    </label>
+                                </div>
+                                <p class="caption">同時下載數控制影片數量；分段連線數控制單部影片的串流下載（HLS／DASH）。</p>
+                            </section>
+
+                            <section v-if="currentUser?.id === 'bootstrap-admin'" class="sheet-section">
+                                <h3>
+                                    <span>Cookie 管理</span>
+                                    <span class="badge" :class="cookieStatus ? 'badge-green' : 'badge-orange'">檔案：{{ cookieStatus ? '已上傳' : '未提供' }}</span>
+                                </h3>
+                                <div class="group group-surface">
+                                    <div class="row"><span class="row-title">Cookies 來源</span>
+                                        <button type="button" class="select-btn" @click="toggleSelect('sel:cookie-source', $event)" aria-haspopup="menu" :aria-expanded="openChip === 'sel:cookie-source'">
+                                            <span>{{ cookieSourceLabels[tempConfig.cookie_source] }}</span><svg class="ico"><use href="#i-updown"></use></svg>
+                                        </button>
+                                        <transition name="menu">
+                                            <ul v-if="openChip === 'sel:cookie-source'" class="menu menu-fixed" role="menu" :style="selectStyle" @click.stop>
+                                                <li v-for="(label, key) in cookieSourceLabels" :key="key" role="menuitem" tabindex="0" @click="tempConfig.cookie_source = key; closeDropdowns()" @keyup.enter="tempConfig.cookie_source = key; closeDropdowns()" :class="{ selected: tempConfig.cookie_source === key }"><span>{{ label }}</span><svg v-if="tempConfig.cookie_source === key" class="ico"><use href="#i-check"></use></svg></li>
                                             </ul>
                                         </transition>
                                     </div>
-                                    <button @click="startDownload" :disabled="sourceChanged" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] text-white font-medium px-6 py-3 rounded-xl btn-interactive flex items-center justify-center gap-2 mt-2">
-                                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                        加入下載佇列
-                                    </button>
+                                    <template v-if="tempConfig.cookie_source === 'browser'">
+                                        <div class="row"><span class="row-title">瀏覽器</span>
+                                        <button type="button" class="select-btn" @click="toggleSelect('sel:cookie-browser', $event)" aria-haspopup="menu" :aria-expanded="openChip === 'sel:cookie-browser'">
+                                            <span>{{ tempConfig.cookie_browser }}</span><svg class="ico"><use href="#i-updown"></use></svg>
+                                        </button>
+                                        <transition name="menu">
+                                            <ul v-if="openChip === 'sel:cookie-browser'" class="menu menu-fixed" role="menu" :style="selectStyle" @click.stop>
+                                                <li v-for="name in cookieBrowsers" :key="name" role="menuitem" tabindex="0" @click="tempConfig.cookie_browser = name; closeDropdowns()" @keyup.enter="tempConfig.cookie_browser = name; closeDropdowns()" :class="{ selected: tempConfig.cookie_browser === name }"><span>{{ name }}</span><svg v-if="tempConfig.cookie_browser === name" class="ico"><use href="#i-check"></use></svg></li>
+                                            </ul>
+                                        </transition>
+                                    </div>
+                                        <label class="row"><span class="row-title">設定檔</span>
+                                            <input v-model="tempConfig.cookie_profile" placeholder="留空使用預設" class="row-input" aria-label="設定檔名稱或路徑">
+                                        </label>
+                                    </template>
                                 </div>
-                            </template>
+                                <p class="caption">此為系統管理者的舊版伺服器來源；個人 cookies 優先使用，只供自己的帳號解析與下載。目前使用：{{ systemStatus.source === 'browser' ? systemStatus.browser : systemStatus.source === 'none' ? '停用' : '上傳檔案' }}。變更來源需儲存設定。</p>
+                                <div class="actions-inline" style="padding:12px 16px 0">
+                                    <button @click="openSites" class="btn btn-sm btn-tinted">cookies.txt 使用教學與匯入</button>
+                                    <button @click="testCookies" class="btn btn-sm btn-gray">測試已儲存的來源</button>
+                                    <button v-if="cookieStatus" @click="deleteCookies" class="btn btn-sm btn-danger">刪除上傳檔案</button>
+                                </div>
+                                <transition name="result">
+                                    <p v-if="cookieMsg" class="callout" :class="cookieMsgSuccess ? '' : 'callout-error'" :style="cookieMsgSuccess ? 'background:var(--tint-green);color:var(--green);margin-top:12px' : 'margin-top:12px'">{{ cookieMsg }}</p>
+                                </transition>
+                            </section>
+
+                            <section class="sheet-section">
+                                <h3>系統狀態</h3>
+                                <div class="group group-surface">
+                                    <div class="row"><span class="row-title">FFmpeg／ffprobe</span><span class="row-value" :style="{ color: systemStatus.ffmpeg_available ? 'var(--green)' : 'var(--red)' }">{{ systemStatus.ffmpeg_available ? '可使用' : '缺少，請安裝後重啟' }}</span></div>
+                                    <div class="row"><span class="row-title">SSO</span><span class="row-value">{{ systemStatus.sso_enabled ? '已設定' : '尚未設定' }}</span></div>
+                                    <div class="row"><span class="row-title">yt-dlp</span><span class="row-value tnum">{{ ytdlpVersion }}</span></div>
+                                </div>
+                                <p class="caption">SSO 負責登入此工具；尚未設定時請由部署環境設定 OIDC。影片網站的登入狀態透過上方 cookies 來源提供。</p>
+                            </section>
+
+                            <section class="sheet-section">
+                                <h3>系統維護</h3>
+                                <button @click="updateYtDlp" :disabled="isUpdating" class="btn btn-gray btn-block">
+                                    <span v-if="isUpdating" class="spinner"></span><svg v-else class="ico"><use href="#i-retry"></use></svg>
+                                    {{ isUpdating ? '更新中…請稍候' : '一鍵更新 yt-dlp' }}
+                                </button>
+                                <transition name="result">
+                                    <p v-if="updateMsg" class="callout" :class="updateSuccess ? '' : 'callout-error'" :style="updateSuccess ? 'background:var(--tint-green);color:var(--green);margin-top:12px' : 'margin-top:12px'">{{ updateMsg }}</p>
+                                </transition>
+                            </section>
                         </div>
-                    </transition>
 
-                    <!-- Batch Download Messages -->
-                    <transition name="slide-up">
-                        <div v-if="batchDownloadMsg" class="mt-4 p-4 rounded-xl border flex items-center gap-3 backdrop-blur-md" :class="batchDownloadSuccess ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'">
-                            <svg v-if="batchDownloadSuccess" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                            <svg v-else class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                            <span class="font-medium text-sm">{{ batchDownloadMsg }}</span>
-                        </div>
-                    </transition>
-                </div>
-
-                <!-- Right Column: Task List -->
-                <div class="lg:w-[55%] glass-panel p-6 rounded-2xl flex flex-col lg:h-[calc(100vh-160px)] min-h-[500px] border-t border-white/20 relative z-10">
-
-                    <div class="flex justify-between items-center mb-6 shrink-0 pb-4 border-b border-white/10">
-                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                            <svg class="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-                            下載任務 ({{ tasks.length }})
-                        </h2>
-                        <div class="text-sm bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-2">
-                            <span class="relative flex h-2.5 w-2.5">
-                              <span v-if="wsConnected" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                              <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="wsConnected ? 'bg-emerald-500' : 'bg-rose-500'"></span>
-                            </span>
-                            <span :class="{'text-emerald-400 font-medium': wsConnected, 'text-rose-400': !wsConnected}">
-                                {{ wsConnected ? '系統已連線' : '連線中斷' }}
-                            </span>
+                        <div class="sheet-foot">
+                            <button @click="showSettings = false" class="btn btn-gray">取消</button>
+                            <button @click="saveSettings" class="btn btn-primary">儲存設定</button>
                         </div>
                     </div>
+                </div>
+            </transition>
 
-                    <button @click="downloadAll" :disabled="completedCount === 0" class="w-full mb-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 py-3 font-medium text-white">一鍵下載 ZIP（{{ completedCount }} 個已完成項目）</button>
-                    <p class="text-sm text-slate-400 mb-4">進行中 {{ activeDownloads }} / {{ config.max_concurrent_downloads }} · 排隊 {{ tasks.filter(t => t.state === 'QUEUED').length }}</p>
-                    <!-- Scrolling Area -->
-                    <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 relative overflow-x-hidden">
-
-                        <div v-if="tasks.length === 0" class="flex flex-col items-center justify-center h-full text-slate-400/60 pb-10">
-                            <svg class="w-20 h-20 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
-                            <p class="text-lg">目前沒有任何下載任務</p>
+            <!-- User management -->
+            <transition name="sheet">
+                <div v-if="showUserManagement && isAdmin" class="overlay" @click.self="showUserManagement = false">
+                    <div class="sheet sheet-lg" role="dialog" aria-modal="true" aria-label="使用者管理">
+                        <div class="sheet-head">
+                            <h2>使用者管理</h2>
+                            <button @click="showUserManagement = false" aria-label="關閉使用者管理" class="btn-icon"><svg class="ico ico-sm"><use href="#i-x"></use></svg></button>
                         </div>
+                        <div class="sheet-body">
+                            <section class="sheet-section">
+                                <h3>每日下載規則</h3>
+                                <div class="group group-surface">
+                                    <label class="row"><span class="row-title">一般使用者預設每日上限</span>
+                                        <input v-model.number="userPolicy.default_daily_limit" aria-label="一般使用者預設每日上限" type="number" min="0" max="10000" class="row-input tnum" style="color:var(--accent)">
+                                    </label>
+                                </div>
+                                <p class="caption">管理者不限部數。個人可覆寫預設值；0 代表不允許新增下載。額度按成功完成的影片計算，排隊先預留、失敗歸還，每天台灣時間 00:00 重置。</p>
+                                <div style="padding:12px 16px 0"><button @click="savePolicy" :disabled="userBusy" class="btn btn-sm btn-primary">儲存預設上限</button></div>
+                            </section>
 
-                        <!-- Transition Group wrapper must have pos-relative for smooth absolute positioning during leave -->
-                        <div class="relative w-full pb-4">
-                            <transition-group name="list" tag="div" class="flex flex-col gap-4">
-                                <div v-for="task in reversedTasks" :key="task.task_id" class="glass-panel p-5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors w-full box-border">
-                                    <div class="flex justify-between items-start mb-3 gap-4">
-                                        <div class="flex-1 min-w-0">
-                                            <h4 class="font-semibold text-slate-100 truncate mb-1" :title="task.title">{{ task.title }}</h4>
-                                            <div class="text-xs text-slate-400 flex flex-wrap gap-2 items-center">
-                                                <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30">
-                                                    {{ task.output_format === 'original' ? '原始容器' : (task.output_format || 'mp4').toUpperCase() }}
-                                                </span>
-                                                <span class="px-2 py-0.5 rounded bg-white/5 border border-white/10">狀態: {{ getStatusText(task.state) }}</span>
-                                                <span v-if="task.state === 'DOWNLOADING'" class="text-blue-300">速度: {{ task.speed || '計算中...' }}</span>
-                                                <span v-if="task.state === 'DOWNLOADING'" class="text-blue-300">剩餘: {{ task.eta || '--' }}</span>
+                            <form @submit.prevent="createUser" class="sheet-section">
+                                <h3>新增使用者</h3>
+                                <div class="user-card">
+                                    <div class="form-grid">
+                                        <label class="field"><span>新帳號</span><input v-model="newUser.username" required minlength="3" maxlength="64" autocomplete="off" class="input" placeholder="英文、數字、. _ @ -"></label>
+                                        <label class="field"><span>顯示名稱</span><input v-model="newUser.name" required maxlength="80" class="input"></label>
+                                        <label class="field"><span>初始密碼</span><input v-model="newUser.password" type="password" required minlength="10" maxlength="256" autocomplete="new-password" class="input" placeholder="至少 10 個字元"></label>
+                                        <div class="field"><span>角色</span>
+                                                <button type="button" class="input select-field" @click="toggleSelect('sel:role-new', $event)" aria-haspopup="menu" :aria-expanded="openChip === 'sel:role-new'">
+                                                    <span>{{ roleLabels[newUser.role] }}</span><svg class="ico"><use href="#i-updown"></use></svg>
+                                                </button>
+                                                <transition name="menu">
+                                            <ul v-if="openChip === 'sel:role-new'" class="menu menu-fixed" role="menu" :style="selectStyle" @click.stop>
+                                                <li v-for="(label, key) in roleLabels" :key="key" role="menuitem" tabindex="0" @click="newUser.role = key; closeDropdowns()" @keyup.enter="newUser.role = key; closeDropdowns()" :class="{ selected: newUser.role === key }"><span>{{ label }}</span><svg v-if="newUser.role === key" class="ico"><use href="#i-check"></use></svg></li>
+                                            </ul>
+                                        </transition>
                                             </div>
-                                        </div>
-                                        <div class="flex gap-2 shrink-0">
-                                            <button v-if="task.state === 'COMPLETED'" @click="downloadFile(task)" title="下載至電腦" class="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 p-2 rounded-lg btn-interactive">
-                                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                                            </button>
-                                            <button v-if="task.state === 'ERROR'" @click="retryTask(task)" title="重試任務" class="bg-indigo-500/20 text-indigo-300 px-3 py-2 rounded-lg text-sm">重試</button>
-                                            <button :disabled="['DOWNLOADING', 'PROCESSING'].includes(task.state)" @click="deleteTask(task.task_id)" title="刪除任務" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 p-2 rounded-lg btn-interactive">
-                                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                            </button>
-                                        </div>
                                     </div>
+                                    <div v-if="newUser.role === 'user'" class="group">
+                                        <label class="row row-tap"><span class="row-title">使用全體預設每日上限</span><input type="checkbox" v-model="newUser.inherit" class="switch"></label>
+                                        <label v-if="!newUser.inherit" class="row"><span class="row-title">個人每日上限</span><input v-model.number="newUser.daily_limit" type="number" min="0" max="10000" class="row-input tnum" style="color:var(--accent)"></label>
+                                    </div>
+                                    <div><button type="submit" :disabled="userBusy" class="btn btn-sm btn-primary">新增帳號</button></div>
+                                </div>
+                            </form>
 
-                                    <!-- Progress Bar -->
-                                    <div class="w-full bg-slate-800/80 rounded-full h-3 mt-4 overflow-hidden border border-slate-700/50 shadow-inner">
-                                        <div class="h-full rounded-full transition-all duration-500"
-                                             :class="getProgressBarClass(task.state)"
-                                             :style="`width: ${task.state === 'COMPLETED' ? 100 : task.progress}%`">
+                            <section class="sheet-section">
+                                <h3>帳號與個別設定</h3>
+                                <div style="display:flex;flex-direction:column;gap:12px">
+                                    <div v-for="user in managedUsers" :key="user.id" :data-user-id="user.id" class="user-card">
+                                        <div class="user-card-head">
+                                            <span style="font-weight:600;word-break:break-all">{{ user.username }} <span class="badge" style="margin-left:6px">{{ user.oidc_sub ? 'SSO' : user.id === 'bootstrap-admin' ? '系統管理者' : '本機帳號' }}</span></span>
+                                            <span class="caption tnum">今日完成 {{ user.quota.used }} · 預留 {{ user.quota.reserved }} · {{ user.quota.limit === null ? '不限' : `上限 ${user.quota.limit}` }}</span>
                                         </div>
-                                    </div>
-                                    <div v-if="task.state === 'ERROR'" class="text-sm text-rose-400 mt-2 bg-rose-500/10 p-2 rounded border border-rose-500/20">
-                                        {{ task.error_msg }}
-                                        <button v-if="task.login_required" @click="openSites" class="block mt-3 text-sm bg-indigo-600 text-white rounded-lg px-3 py-2">查看教學並匯入 cookies.txt</button>
-                                        <p v-if="task.login_required" class="text-xs text-slate-400 mt-2">匯入後，按此任務的「重試」按鈕。</p>
+                                        <div class="form-grid">
+                                            <label class="field"><span>名稱</span><input v-model="user.name" class="input"></label>
+                                            <div class="field"><span>角色</span>
+                                                <button type="button" class="input select-field" @click="toggleSelect('sel:role-' + user.id, $event)" :disabled="user.id === 'bootstrap-admin'" aria-haspopup="menu" :aria-expanded="openChip === 'sel:role-' + user.id">
+                                                    <span>{{ roleLabels[user.role] }}</span><svg class="ico"><use href="#i-updown"></use></svg>
+                                                </button>
+                                                <transition name="menu">
+                                            <ul v-if="openChip === 'sel:role-' + user.id" class="menu menu-fixed" role="menu" :style="selectStyle" @click.stop>
+                                                <li v-for="(label, key) in roleLabels" :key="key" role="menuitem" tabindex="0" @click="user.role = key; closeDropdowns()" @keyup.enter="user.role = key; closeDropdowns()" :class="{ selected: user.role === key }"><span>{{ label }}</span><svg v-if="user.role === key" class="ico"><use href="#i-check"></use></svg></li>
+                                            </ul>
+                                        </transition>
+                                            </div>
+                                            <label v-if="!user.oidc_sub" class="field"><span>重設密碼</span><input v-model="user.newPassword" type="password" minlength="10" autocomplete="new-password" placeholder="留空保留密碼" class="input"></label>
+                                        </div>
+                                        <div class="group">
+                                            <template v-if="user.role === 'user'">
+                                                <label class="row row-tap"><span class="row-title">使用全體預設每日上限</span><input type="checkbox" v-model="user.inherit" class="switch"></label>
+                                                <label v-if="!user.inherit" class="row"><span class="row-title">個人每日上限</span><input v-model.number="user.limitInput" type="number" min="0" max="10000" class="row-input tnum" style="color:var(--accent)"></label>
+                                            </template>
+                                            <label class="row row-tap"><span class="row-title">停用此帳號</span><input type="checkbox" v-model="user.disabled" :disabled="user.id === 'bootstrap-admin'" class="switch"></label>
+                                        </div>
+                                        <div style="display:flex;justify-content:flex-end"><button @click="saveUser(user)" :disabled="userBusy" class="btn btn-sm btn-primary">儲存使用者</button></div>
                                     </div>
                                 </div>
-                            </transition-group>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Settings Modal -->
-            <transition name="slide-up">
-                <div v-if="showSettings && isAdmin" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div class="glass-panel p-6 sm:p-8 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border-t border-white/20 shadow-2xl relative">
-                        <button aria-label="關閉設定" @click="showSettings = false" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
-                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
-
-                        <h2 class="text-xl font-bold mb-6 text-white flex items-center gap-2">
-                            <svg class="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                            系統設定
-                        </h2>
-
-                        <div class="mb-6">
-                            <label class="block text-sm font-medium text-slate-300 mb-2">最大同時下載數</label>
-                            <input aria-label="最大同時下載數" v-model.number="tempConfig.max_concurrent_downloads" type="number" min="1" max="10" class="w-full glass-input rounded-xl p-3">
-                        </div>
-
-                        <div class="mb-6">
-                            <label class="block text-sm font-medium text-slate-300 mb-2">每部影片的分段連線數（HLS／DASH）</label>
-                            <input aria-label="每部影片的分段連線數" v-model.number="tempConfig.concurrent_fragments" type="number" min="1" max="16" class="w-full glass-input rounded-xl p-3">
-                            <p class="text-xs text-slate-400 mt-2">同時下載數控制影片數量；分段連線數控制單部影片的串流下載。</p>
-                        </div>
-                        <div v-if="currentUser?.id === 'bootstrap-admin'" class="mb-6 border-t border-white/10 pt-6">
-                            <div class="flex justify-between items-center mb-3">
-                                <h3 class="text-sm font-bold text-slate-200">Cookie 管理</h3>
-                                <span class="text-xs font-mono px-2 py-1 rounded-md border" :class="cookieStatus ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-amber-400 border-amber-500/30 bg-amber-500/10'">
-                                    檔案: {{ cookieStatus ? '已上傳' : '未提供' }}
-                                </span>
-                            </div>
-                            <label class="block text-sm text-slate-300 mb-3">Cookies 來源
-                                <select v-model="tempConfig.cookie_source" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
-                                    <option value="file">上傳的 cookies.txt</option><option value="browser">執行主機的瀏覽器</option><option value="none">不使用 cookies</option>
-                                </select>
-                            </label>
-                            <div v-if="tempConfig.cookie_source === 'browser'" class="space-y-3 mb-3">
-                                <label class="block text-sm text-slate-300">瀏覽器
-                                    <select v-model="tempConfig.cookie_browser" class="w-full mt-2 glass-input rounded-xl p-3 bg-slate-800">
-                                        <option v-for="browser in ['firefox','chrome','chromium','edge','safari','brave','opera','vivaldi','whale']" :value="browser">{{ browser }}</option>
-                                    </select>
-                                </label>
-                                <label class="block text-sm text-slate-300">設定檔名稱或路徑（選填）
-                                    <input v-model="tempConfig.cookie_profile" placeholder="留空使用預設設定檔" class="w-full mt-2 glass-input rounded-xl p-3">
-                                </label>
-                            </div>
-                            <p class="text-xs text-slate-400 mb-3">此為系統管理者的舊版伺服器來源；個人 cookies 優先使用，只供自己的帳號解析與下載。</p>
-                            <button @click="openSites" class="text-sm text-indigo-300 border border-indigo-400/30 rounded-lg px-3 py-2">cookies.txt 使用教學與匯入</button>
-                            <div class="flex gap-3 mt-3">
-                                <button @click="testCookies" class="text-sm text-indigo-300 border border-indigo-400/30 rounded-lg px-3 py-2">測試已儲存的來源</button>
-                                <button v-if="cookieStatus" @click="deleteCookies" class="text-sm text-rose-300 border border-rose-400/30 rounded-lg px-3 py-2">刪除上傳檔案</button>
-                            </div>
-                            <p class="text-xs text-slate-400 mt-2">目前使用：{{ systemStatus.source === 'browser' ? systemStatus.browser : systemStatus.source === 'none' ? '停用' : '上傳檔案' }}。變更來源需儲存設定。</p>
-                            <transition name="slide-up">
-                                <p v-if="cookieMsg" class="text-sm mt-3 p-2 rounded-lg border" :class="cookieMsgSuccess ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'">{{ cookieMsg }}</p>
-                            </transition>
-                        </div>
-
-                        <div class="mb-6 border-t border-white/10 pt-6 text-sm text-slate-300 space-y-2">
-                            <p>FFmpeg／ffprobe：{{ systemStatus.ffmpeg_available ? '可使用' : '缺少，請安裝後重啟' }}</p>
-                            <p>SSO：{{ systemStatus.sso_enabled ? '已設定' : '尚未設定（請由部署環境設定 OIDC）' }}</p>
-                            <p class="text-xs text-slate-400">SSO 負責登入此工具。影片網站的登入狀態透過上方 cookies 來源提供。</p>
-                        </div>
-                        <div class="mb-8 border-t border-white/10 pt-6">
-                            <div class="flex justify-between items-center mb-3">
-                                <h3 class="text-sm font-bold text-slate-200">系統維護</h3>
-                                <span class="text-xs font-mono text-blue-300 bg-blue-500/10 border border-blue-500/30 px-2 py-1 rounded-md">目前版本: {{ ytdlpVersion }}</span>
-                            </div>
-
-                            <button @click="updateYtDlp" :disabled="isUpdating" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white py-3 rounded-xl btn-interactive flex justify-center items-center gap-2 font-medium">
-                                <template v-if="isUpdating">
-                                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    更新中...請稍候
-                                </template>
-                                <template v-else>
-                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                    一鍵更新 yt-dlp
-                                </template>
-                            </button>
-                            <transition name="slide-up">
-                                <p v-if="updateMsg" class="text-sm mt-3 p-2 rounded-lg border" :class="updateSuccess ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-rose-400 bg-rose-500/10 border-rose-500/20'">{{ updateMsg }}</p>
-                            </transition>
-                        </div>
-
-                        <div class="flex justify-end gap-3 border-t border-white/10 pt-6">
-                            <button @click="showSettings = false" class="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-800 btn-interactive font-medium">取消</button>
-                            <button @click="saveSettings" class="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl shadow-lg hover:shadow-[0_0_15px_rgba(79,70,229,0.4)] btn-interactive font-medium">儲存設定</button>
+                            </section>
                         </div>
                     </div>
                 </div>
             </transition>
 
+            <!-- Cookies -->
+            <transition name="sheet">
+                <div v-if="showSites" class="overlay" @click.self="showSites = false">
+                    <div class="sheet" role="dialog" aria-modal="true" aria-label="Cookies 設定">
+                        <div class="sheet-head">
+                            <h2>Cookies 設定</h2>
+                            <button @click="showSites = false" aria-label="關閉 Cookies 設定" class="btn-icon"><svg class="ico ico-sm"><use href="#i-x"></use></svg></button>
+                        </div>
+                        <div class="sheet-body">
+                            <p class="caption" style="padding:0 4px;font-size:14px">影片需要登入才能觀看時，先在自己的電腦登入網站，再匯入 cookies.txt。匯入資料只供你的帳號使用。</p>
 
-            <div v-if="showUserManagement && isAdmin" role="dialog" aria-label="使用者管理" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 p-4 flex items-center justify-center">
-                <div class="glass-panel rounded-2xl p-5 sm:p-7 w-full max-w-4xl max-h-[92vh] overflow-y-auto space-y-6">
-                    <div class="flex justify-between items-center gap-3">
-                        <h2 class="text-xl font-bold">使用者管理</h2>
-                        <button @click="showUserManagement = false" aria-label="關閉使用者管理" class="px-3 py-2 text-slate-300">✕</button>
-                    </div>
-                    <div class="bg-white/5 rounded-xl p-4 space-y-3">
-                        <h3 class="font-semibold">每日下載規則</h3>
-                        <label class="block text-sm text-slate-300">一般使用者預設每日上限
-                            <input v-model.number="userPolicy.default_daily_limit" type="number" min="0" max="10000" class="w-full mt-2 glass-input p-3 rounded-xl">
-                        </label>
-                        <p class="text-xs text-slate-400">管理者不限部數。個人可覆寫預設值；0 代表不允許新增下載。額度按成功完成的影片計算，排隊先預留、失敗歸還，每天台灣時間 00:00 重置。</p>
-                        <button @click="savePolicy" :disabled="userBusy" class="bg-indigo-600 hover:bg-indigo-500 rounded-lg px-4 py-2 text-sm">儲存預設上限</button>
-                    </div>
-                    <form @submit.prevent="createUser" class="bg-white/5 rounded-xl p-4 space-y-4">
-                        <h3 class="font-semibold">新增使用者</h3>
-                        <div class="grid sm:grid-cols-2 gap-3">
-                            <label class="text-sm text-slate-300">新帳號<input v-model="newUser.username" required minlength="3" maxlength="64" autocomplete="off" class="w-full mt-2 glass-input p-3 rounded-xl" placeholder="英文、數字、. _ @ -"></label>
-                            <label class="text-sm text-slate-300">顯示名稱<input v-model="newUser.name" required maxlength="80" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
-                            <label class="text-sm text-slate-300">初始密碼<input v-model="newUser.password" type="password" required minlength="10" maxlength="256" autocomplete="new-password" class="w-full mt-2 glass-input p-3 rounded-xl" placeholder="至少 10 個字元"></label>
-                            <label class="text-sm text-slate-300">角色<select v-model="newUser.role" class="w-full mt-2 glass-input p-3 rounded-xl bg-slate-800"><option value="user">一般使用者</option><option value="admin">管理者（不限部數）</option></select></label>
-                        </div>
-                        <div v-if="newUser.role === 'user'" class="space-y-3">
-                            <label class="flex items-center gap-2 text-sm"><input type="checkbox" v-model="newUser.inherit">使用全體預設每日上限</label>
-                            <label v-if="!newUser.inherit" class="block text-sm">個人每日上限<input v-model.number="newUser.daily_limit" type="number" min="0" max="10000" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
-                        </div>
-                        <button type="submit" :disabled="userBusy" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm">新增帳號</button>
-                    </form>
-                    <div class="space-y-4">
-                        <h3 class="font-semibold">帳號與個別設定</h3>
-                        <div v-for="user in managedUsers" :key="user.id" :data-user-id="user.id" class="border border-white/10 rounded-xl p-4 space-y-3">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <span class="font-semibold break-all">{{ user.username }} <span class="text-xs text-slate-400">{{ user.oidc_sub ? 'SSO' : user.id === 'bootstrap-admin' ? '系統管理者' : '本機帳號' }}</span></span>
-                                <span class="text-xs text-slate-400">今日完成 {{ user.quota.used }} · 預留 {{ user.quota.reserved }} · {{ user.quota.limit === null ? '不限' : `上限 ${user.quota.limit}` }}</span>
-                            </div>
-                            <div class="grid sm:grid-cols-2 gap-3">
-                                <label class="text-sm text-slate-300">名稱<input v-model="user.name" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
-                                <label class="text-sm text-slate-300">角色<select v-model="user.role" :disabled="user.id === 'bootstrap-admin'" class="w-full mt-2 glass-input p-3 rounded-xl bg-slate-800"><option value="user">一般使用者</option><option value="admin">管理者（不限部數）</option></select></label>
-                                <label v-if="!user.oidc_sub" class="text-sm text-slate-300">重設密碼<input v-model="user.newPassword" type="password" minlength="10" autocomplete="new-password" placeholder="留空保留密碼" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
-                                <div v-if="user.role === 'user'" class="text-sm space-y-2">
-                                    <label class="flex items-center gap-2"><input type="checkbox" v-model="user.inherit">使用全體預設每日上限</label>
-                                    <label v-if="!user.inherit" class="block">個人每日上限<input v-model.number="user.limitInput" type="number" min="0" max="10000" class="w-full mt-2 glass-input p-3 rounded-xl"></label>
+                            <section aria-labelledby="cookie-guide-title" class="sheet-section">
+                                <h3 id="cookie-guide-title">使用教學</h3>
+                                <div class="group group-surface" style="padding:16px">
+                                    <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer" class="link" style="font-size:15px;font-weight:500;word-break:break-word">安裝 Get cookies.txt LOCALLY<svg class="ico ico-sm" style="display:inline;vertical-align:-2px;margin-left:3px"><use href="#i-external"></use></svg></a>
+                                    <ol style="margin:12px 0 0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px;font-size:14.5px;line-height:1.55;color:var(--label-2)">
+                                        <li>在電腦的 Chrome 開啟上方連結，按「加到 Chrome」，安裝擴充套件。</li>
+                                        <li>開啟要下載的網站（例如 YouTube），登入自己的帳號，確認影片可以播放。</li>
+                                        <li>保持在該網站分頁，點 Chrome 右上角的擴充功能圖示，開啟 Get cookies.txt LOCALLY。將 Export Format 設為 <strong style="color:var(--label)">Netscape</strong>，按 <strong style="color:var(--label)">Export</strong> 或 Export As，儲存 .txt 檔案。</li>
+                                        <li>回到這裡選取檔案，按「匯入個人 cookies」。成功後關閉此視窗，重新按「解析網址」，或在失敗任務按「重試」。</li>
+                                    </ol>
+                                    <p class="caption" style="margin-top:12px">只需匯出要下載網站的 cookies；請選 Netscape 格式，檔案上限 2 MB。登入失效時，重新登入網站、匯出並匯入即可。</p>
                                 </div>
-                            </div>
-                            <div class="flex flex-wrap items-center justify-between gap-3">
-                                <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" v-model="user.disabled" :disabled="user.id === 'bootstrap-admin'">停用此帳號</label>
-                                <button @click="saveUser(user)" :disabled="userBusy" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm">儲存使用者</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                            </section>
 
-            <div v-if="showSites" role="dialog" aria-modal="true" aria-label="Cookies 設定" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 p-4 flex items-center justify-center">
-                <div class="glass-panel rounded-2xl p-5 sm:p-7 w-full max-w-xl max-h-[92vh] overflow-y-auto space-y-5">
-                    <div class="flex items-center justify-between gap-3"><h2 class="font-bold text-xl">Cookies 設定</h2><button @click="showSites = false" aria-label="關閉 Cookies 設定" class="px-3 py-2">✕</button></div>
-                    <p class="text-sm text-slate-400">影片需要登入才能觀看時，先在自己的電腦登入網站，再匯入 cookies.txt。匯入資料只供你的帳號使用。</p>
-                    <section aria-labelledby="cookie-guide-title" class="rounded-xl border border-indigo-400/25 bg-indigo-500/5 p-4 space-y-3">
-                        <h3 id="cookie-guide-title" class="font-semibold">cookies.txt 使用教學</h3>
-                        <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer" class="inline-flex text-sm text-indigo-300 underline underline-offset-4 break-words">安裝 Get cookies.txt LOCALLY ↗</a>
-                        <ol class="list-decimal pl-5 space-y-2 text-sm text-slate-300 leading-relaxed">
-                            <li>在電腦的 Chrome 開啟上方連結，按「加到 Chrome」，安裝擴充套件。</li>
-                            <li>開啟要下載的網站（例如 YouTube），登入自己的帳號，確認影片可以播放。</li>
-                            <li>保持在該網站分頁，點 Chrome 右上角的擴充功能圖示，開啟 Get cookies.txt LOCALLY。將 Export Format 設為 <strong class="text-white">Netscape</strong>，按 <strong class="text-white">Export</strong> 或 Export As，儲存 .txt 檔案。</li>
-                            <li>回到這裡選取檔案，按「匯入個人 cookies」。成功後關閉此視窗，重新按「解析網址」，或在失敗任務按「重試」。</li>
-                        </ol>
-                        <p class="text-xs text-slate-400">只需匯出要下載網站的 cookies；請選 Netscape 格式，檔案上限 2 MB。登入失效時，重新登入網站、匯出並匯入即可。</p>
-                    </section>
-                    <div class="space-y-3">
-                        <h3 class="font-semibold text-sm">匯入 cookies.txt</h3>
-                        <input type="file" accept=".txt" ref="cookieFileInput" @change="handleCookieFileChange" aria-label="個人 cookies 檔案" class="w-full text-sm glass-input rounded-xl p-3">
-                        <button @click="uploadCookie" :disabled="isUploadingCookie || !cookieFile" class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-400 px-4 py-2 rounded-lg text-sm">{{ isUploadingCookie ? '匯入中…' : '匯入個人 cookies' }}</button>
-                        <p v-if="cookieMsg" role="status" class="text-sm break-words" :class="cookieMsgSuccess ? 'text-emerald-300' : 'text-rose-300'">{{ cookieMsg }}</p>
-                        <p class="text-xs text-slate-400">新檔案會取代上一份個人匯入檔案。cookies 包含登入憑證，請妥善保管並只上傳至你信任的下載工具。</p>
-                    </div>
-                    <div class="border-t border-white/10 pt-4 space-y-3">
-                        <h3 class="font-semibold text-sm">已儲存的 cookies</h3>
-                        <div v-if="siteAccounts.length" class="space-y-3">
-                            <div v-for="site in siteAccounts" :key="site.site_key" class="border border-white/10 p-3 rounded-xl flex justify-between items-center gap-3">
-                                <span class="break-all text-sm">{{ site.name }}<span class="block text-xs text-slate-400">僅供自己的帳號使用</span></span>
-                                <button @click="forgetSite(site)" class="text-sm text-rose-300 px-3 py-2 border border-rose-400/30 rounded-lg shrink-0">移除</button>
-                            </div>
+                            <section class="sheet-section">
+                                <h3>匯入 cookies.txt</h3>
+                                <div class="group group-surface" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+                                    <input type="file" accept=".txt" ref="cookieFileInput" @change="handleCookieFileChange" aria-label="個人 cookies 檔案">
+                                    <div><button @click="uploadCookie" :disabled="isUploadingCookie || !cookieFile" class="btn btn-sm btn-primary"><span v-if="isUploadingCookie" class="spinner"></span>{{ isUploadingCookie ? '匯入中…' : '匯入個人 cookies' }}</button></div>
+                                    <p v-if="cookieMsg" role="status" class="caption" style="font-size:14px;word-break:break-word" :style="{ color: cookieMsgSuccess ? 'var(--green)' : 'var(--red)' }">{{ cookieMsg }}</p>
+                                </div>
+                                <p class="caption">新檔案會取代上一份個人匯入檔案。cookies 包含登入憑證，請妥善保管並只上傳至你信任的下載工具。</p>
+                            </section>
+
+                            <section class="sheet-section">
+                                <h3>已儲存的 cookies</h3>
+                                <div v-if="siteAccounts.length" class="group group-surface">
+                                    <div v-for="site in siteAccounts" :key="site.site_key" class="row">
+                                        <span style="min-width:0;word-break:break-all">{{ site.name }}<span class="row-sub">僅供自己的帳號使用</span></span>
+                                        <button @click="forgetSite(site)" class="btn btn-sm btn-danger">移除</button>
+                                    </div>
+                                </div>
+                                <p v-else class="caption" style="padding:0 16px;font-size:14px">尚未匯入個人 cookies。</p>
+                            </section>
                         </div>
-                        <p v-else class="text-sm text-slate-400">尚未匯入個人 cookies。</p>
                     </div>
                 </div>
-            </div>
+            </transition>
         </template>
-            <transition name="slide-up">
-    <div v-if="confirmModal.show" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-        <div class="glass-panel p-8 rounded-2xl w-full max-w-sm border-t border-white/20 shadow-2xl text-center">
-            <div class="w-16 h-16 bg-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mx-auto mb-5">
-                <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-            </div>
-            <h3 class="text-xl font-bold text-white mb-2">確認刪除？</h3>
-            <p class="text-slate-400 mb-8 leading-relaxed">{{ confirmModal.message }}</p>
-            <div class="flex gap-3">
-                <button @click="confirmModal.show = false" class="flex-1 px-5 py-3 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-800 btn-interactive font-medium">
-                    取消
-                </button>
-                <button @click="handleConfirm" class="flex-1 px-5 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white rounded-xl shadow-lg hover:shadow-[0_0_20px_rgba(225,29,72,0.4)] btn-interactive font-medium">
-                    確定刪除
-                </button>
-            </div>
-        </div>
-    </div>
-    </transition>
-    <transition name="slide-up">
-                <div v-if="isRestarting" class="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-[200] p-4">
-                    <div class="glass-panel p-8 rounded-2xl w-full max-w-sm border-t border-white/20 text-center shadow-2xl relative overflow-hidden">
-                        
-                        <div class="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl"></div>
-                        <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl"></div>
 
-                        <div class="w-16 h-16 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-                            <svg class="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        </div>
-                        
-                        <h2 class="text-2xl font-bold text-white mb-3 tracking-wide">系統重啟中</h2>
-                        <p class="text-slate-300 mb-8 leading-relaxed">
-                            yt-dlp 更新完畢，後端正在重新載入。<br>
-                            網頁將於 <span class="text-blue-400 font-bold text-2xl mx-1">{{ restartCountdown }}</span> 秒後自動重新整理。
-                        </p>
-                        
-                        <button @click="forceReload" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium py-3.5 rounded-xl btn-interactive flex items-center justify-center gap-2 shadow-lg hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            立刻重新整理
-                        </button>
+        <!-- Confirm alert -->
+        <transition name="alert">
+            <div v-if="confirmModal.show" class="overlay overlay-top overlay-center" style="align-items:center;padding:20px" @click.self="confirmModal.show = false">
+                <div class="sheet alert" role="alertdialog" aria-modal="true" aria-label="確認刪除">
+                    <div class="alert-body">
+                        <div class="alert-icon"><svg class="ico"><use href="#i-trash"></use></svg></div>
+                        <h3>確認刪除？</h3>
+                        <p>{{ confirmModal.message }}</p>
+                    </div>
+                    <div class="alert-actions">
+                        <button @click="handleConfirm" class="btn btn-destructive btn-block">確定刪除</button>
+                        <button @click="confirmModal.show = false" class="btn btn-gray btn-block">取消</button>
                     </div>
                 </div>
-            </transition>
-    
+            </div>
+        </transition>
+
+        <!-- Restarting -->
+        <transition name="alert">
+            <div v-if="isRestarting" class="overlay overlay-top overlay-center" style="align-items:center;padding:20px;z-index:300">
+                <div class="sheet alert" role="alertdialog" aria-modal="true" aria-label="系統重啟中" style="width:320px">
+                    <div class="alert-body" style="padding:28px 24px 22px">
+                        <span class="spinner spinner-lg" style="color:var(--accent)"></span>
+                        <h3 style="margin-top:16px">系統重啟中</h3>
+                        <p>yt-dlp 更新完畢，後端正在重新載入。</p>
+                        <div class="restart-count tnum">{{ restartCountdown }}</div>
+                        <p>秒後自動重新整理</p>
+                    </div>
+                    <div class="alert-actions"><button @click="forceReload" class="btn btn-gray btn-block">立刻重新整理</button></div>
+                </div>
+            </div>
+        </transition>
+
     </div>
 
     <script src="app.js"></script>
-
+    <script>
+        // Hairline under the nav only once content actually scrolls beneath it.
+        (function () {
+            var root = document.documentElement, on = false;
+            function sync() {
+                var next = window.scrollY > 4;
+                if (next !== on) { on = next; root.toggleAttribute('data-scrolled', on); }
+            }
+            window.addEventListener('scroll', sync, { passive: true });
+            sync();
+        })();
+    </script>
 </body>
 </html>

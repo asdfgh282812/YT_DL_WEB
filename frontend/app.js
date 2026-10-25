@@ -195,6 +195,8 @@ createApp({
 
         onMounted(async () => {
             document.addEventListener('click', closeDropdowns);
+            document.addEventListener('keydown', onKeydown);
+            document.addEventListener('scroll', closeOnScroll, true);
             const params = new URLSearchParams(window.location.search);
             if (params.has('auth_error')) {
                 const errors = { access_denied: '此 SSO 帳號沒有使用權限', sso_failed: 'SSO 驗證失敗，請重新登入', sso_unavailable: '無法連線到 SSO，請確認服務與設定' };
@@ -227,6 +229,8 @@ createApp({
 
         onUnmounted(() => {
             document.removeEventListener('click', closeDropdowns);
+            document.removeEventListener('keydown', onKeydown);
+            document.removeEventListener('scroll', closeOnScroll, true);
             clearTimeout(reconnectTimer);
             clearInterval(countdownTimer);
             if (ws) ws.close();
@@ -688,37 +692,70 @@ createApp({
             return map[state] || state;
         };
 
-        const getProgressBarClass = (state) => {
-            switch(state) {
-                case 'QUEUED': return 'bg-slate-500';
-                case 'DOWNLOADING': return 'bg-gradient-to-r from-blue-500 to-indigo-500 progress-bar-striped animate-stripes';
-                case 'PROCESSING': return 'bg-gradient-to-r from-amber-500 to-orange-500 progress-bar-striped animate-stripes';
-                case 'COMPLETED': return 'bg-gradient-to-r from-emerald-400 to-teal-500 shadow-[0_0_10px_rgba(52,211,153,0.5)]';
-                case 'ERROR': return 'bg-gradient-to-r from-rose-500 to-red-600';
-                default: return 'bg-slate-500';
-            }
-        };
+        const getProgressBarClass = (state) => `f-${state}`;
         // ==========================================
         // 補上 AI 遺漏的 Dropdown 控制邏輯
         // ==========================================
         const isBatchDropdownOpen = ref(false);
         const isFormatDropdownOpen = ref(false);
+        const openChip = ref('');
+        const outputLabels = { mp4: 'MP4', mkv: 'MKV', original: '保留原始容器' };
+        const audioLabels = { mp3: 'MP3', m4a: 'M4A' };
 
         const closeDropdowns = () => {
             isBatchDropdownOpen.value = false;
             isFormatDropdownOpen.value = false;
+            openChip.value = '';
+        };
+        const onKeydown = (e) => { if (e.key === 'Escape') closeDropdowns(); };
+        // Menus inside scrolling dialogs are positioned from the trigger's rectangle so the dialog can't clip them.
+        const selectStyle = ref({});
+        const cookieSourceLabels = { file: '上傳的 cookies.txt', browser: '執行主機的瀏覽器', none: '不使用 cookies' };
+        const roleLabels = { user: '一般使用者', admin: '管理者（不限部數）' };
+        const cookieBrowsers = ['firefox', 'chrome', 'chromium', 'edge', 'safari', 'brave', 'opera', 'vivaldi', 'whale'];
+        const toggleSelect = (name, e) => {
+            if (e) e.stopPropagation();
+            if (openChip.value === name) { closeDropdowns(); return; }
+            const rect = e.currentTarget.getBoundingClientRect();
+            const room = { below: window.innerHeight - rect.bottom - 12, above: rect.top - 12 };
+            const up = room.below < 220 && room.above > room.below;
+            const width = Math.max(rect.width, 200);
+            selectStyle.value = {
+                left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)) + 'px',
+                width: width + 'px',
+                maxHeight: Math.max(140, Math.min(320, up ? room.above : room.below)) + 'px',
+                transformOrigin: up ? 'bottom right' : 'top right',
+                ...(up ? { bottom: (window.innerHeight - rect.top + 6) + 'px' } : { top: (rect.bottom + 6) + 'px' })
+            };
+            closeDropdowns();
+            openChip.value = name;
+        };
+        const closeOnScroll = (e) => {
+            if (!openChip.value.startsWith('sel:')) return;
+            const target = e.target;
+            if (target && target.closest && target.closest('.menu-fixed')) return;
+            closeDropdowns();
+        };
+
+        const toggleChip = (name, e) => {
+            if (e) e.stopPropagation();
+            const next = openChip.value === name ? '' : name;
+            closeDropdowns();
+            openChip.value = next;
         };
 
         const toggleBatchDropdown = (e) => {
             if (e) e.stopPropagation();
-            isBatchDropdownOpen.value = !isBatchDropdownOpen.value;
-            isFormatDropdownOpen.value = false; // 開啟這個就關閉另一個
+            const next = !isBatchDropdownOpen.value;
+            closeDropdowns(); // 開啟這個就關閉其他選單
+            isBatchDropdownOpen.value = next;
         };
 
         const toggleFormatDropdown = (e) => {
             if (e) e.stopPropagation();
-            isFormatDropdownOpen.value = !isFormatDropdownOpen.value;
-            isBatchDropdownOpen.value = false;
+            const next = !isFormatDropdownOpen.value;
+            closeDropdowns();
+            isFormatDropdownOpen.value = next;
         };
 
         const selectBatchFormat = (format) => {
@@ -732,11 +769,11 @@ createApp({
         };
 
         const getFormatText = computed(() => {
-            if (selectedFormat.value === 'audio_only') return `🎵 純音訊 (${audioFormat.value.toUpperCase()})`;
-            if (selectedFormat.value === 'best') return '🎬 自動最佳畫質';
+            if (selectedFormat.value === 'audio_only') return `純音訊（${audioFormat.value.toUpperCase()}）`;
+            if (selectedFormat.value === 'best') return '自動最佳畫質';
             if (!parseResult.value || !parseResult.value.video_formats) return '選擇格式';
             const fmt = parseResult.value.video_formats.find(f => f.id === selectedFormat.value);
-            return fmt ? `🎬 ${fmt.resolution} (${fmt.ext})` : '選擇格式';
+            return fmt ? `${fmt.resolution}（${fmt.ext}）` : '選擇格式';
         });
         // ==========================================
         return {
@@ -757,6 +794,8 @@ createApp({
             batchDownloadFormat, selectedCount, selectAll,
             toast, showToast,
             isBatchDropdownOpen, isFormatDropdownOpen, toggleBatchDropdown, toggleFormatDropdown,
+            openChip, toggleChip, outputLabels, audioLabels,
+            selectStyle, toggleSelect, cookieSourceLabels, roleLabels, cookieBrowsers,
             selectBatchFormat, selectFormat, getFormatText, closeDropdowns,
             confirmModal, handleConfirm,isRestarting, restartCountdown, forceReload
         };
