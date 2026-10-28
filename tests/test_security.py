@@ -4,6 +4,7 @@ import subprocess
 import sys
 import threading
 import socket
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
@@ -133,6 +134,9 @@ def test_parallel_password_attempts_cannot_bypass_rate_limit(monkeypatch):
     monkeypatch.setattr(main.auth.store, 'authenticate', check_password)
 
     async def exercise():
+        # Small CI runners otherwise have fewer than ten default workers, so the
+        # gated checks can never all start even when the limiter is correct.
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=24))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url='http://testserver') as client:
             pending = [asyncio.create_task(client.post('/api/auth/login', json={
                 'username': 'alice', 'password': 'incorrect-password',
