@@ -72,6 +72,8 @@ test -f .env || cp .env.example .env
 
 開啟 http://localhost:8000，展開「管理者 Token 登入」完成首次登入，再到「使用者」建立一般帳號，也可替系統管理者 `admin` 設定帳號密碼。
 
+`AUTH_TOKEN` 必須自行設定；未設定、僅含空白或仍使用舊範例值 `your_secure_password_here` 時，Token 登入及既有 Token session 均不接受，已建立的帳密登入和 SSO 仍依原設定運作。登入限制以來源 IP 與統一處理大小寫、前後空白的帳號計算：五分鐘內同一帳號／Token 最多 10 次失敗或尚未完成的驗證，同一 IP 合計最多 50 次；成功驗證不占用失敗額度。
+
 必須保持 `--workers 1`：排程與任務清單是單程序狀態，程序內會依設定同時下載多部。使用者、登入 session、每日完成記錄和 cookies 存在 SQLite，重啟仍保留；任務清單目前不跨重啟保存，遺留的未完成預留會釋放。完成／失敗任務及孤立暫存檔兩小時後清除。
 
 工具登入自登入時間起預設有效 **7 天**，可用 `SESSION_MAX_AGE` 設定秒數（3600～2592000，即 1 小時～30 天），修改後重啟，新登入套用新的期限。SSO 的 ID token 在登入時仍驗證有效期限、簽章、state 與 nonce；通過後建立本工具獨立的登入期限，不會隨短效 ID token 到期而提早登出。資料庫僅保存隨機登入識別碼的雜湊，不保存 SSO 權杖。維持原本的 `config/` 掛載與簽章金鑰，容器重建後即可延續登入；升級前只存在記憶體的舊登入需重新登入一次。
@@ -80,14 +82,40 @@ test -f .env || cp .env.example .env
 
 ## Docker／NAS
 
+預設由 GitHub Actions 建置 Docker 映像並發布至 `ghcr.io/asdfgh282812/yt_dl_web`，NAS 直接拉取，不需要在 NAS 編譯或安裝 Python、Node、FFmpeg。映像支援 `linux/amd64` 與 `linux/arm64`，Docker 會依主機架構選擇。
+
 ```sh
 test -f .env || cp .env.example .env
 # 設定 AUTH_TOKEN、對外網址與需要的 OIDC 欄位
-# 更新部署時重新建置，以套用程式與依賴調整
-docker compose -f compose.yaml up -d --build
+# 首次啟動或更新前，先取得 GitHub 建置完成的映像
+docker compose -f compose.yaml pull
+docker compose -f compose.yaml up -d
 ```
 
-`compose.yaml` 與 `docker-compose.yml` 均提供 `video-downloader` 服務；部署時明確指定使用哪一份，連接埠和掛載位置依該檔案設定。映像包含 Node、FFmpeg 與系統依賴，已移除 Playwright／Chromium。`config/` 和 `temp/` 為持久掛載，來源程式碼打包於映像，因此更新需要 rebuild。舊的 `SITE_LOGIN_*` 環境變數不再使用，可從既有 `.env` 移除。
+`compose.yaml` 使用連接埠 `1200` 與 `/volume1/docker/Youtube_Downloader/` 下的持久目錄；`docker-compose.yml` 使用連接埠 `1280` 與目前資料夾的 `config/`、`temp/`。沿用原本部署的檔案與掛載路徑，以保留帳號、登入和網站 cookies；使用後者時將上述指令的 `-f compose.yaml` 改成 `-f docker-compose.yml`。映像包含 Node、FFmpeg 與系統依賴，已移除 Playwright／Chromium。舊的 `SITE_LOGIN_*` 環境變數不再使用，可從既有 `.env` 移除。
+
+### GitHub 自動建置
+
+工作流程位於 `.github/workflows/container.yml`：
+
+- Pull request 先執行完整後端／前端測試，再建置並檢查單一架構容器；不發布映像。
+- 推送至 `main` 時，測試通過後建置兩種架構，發布 `latest` 與 `sha-完整提交識別碼` 標籤。
+- 推送 `v` 開頭的版本標籤（例如 `v1.0.0`）時，發布同名映像標籤；不覆蓋 `latest`。
+- 也可在 GitHub 的 **Actions → Test and build container → Run workflow** 選擇 `main` 手動建置。
+
+發布使用 GitHub 提供的 `GITHUB_TOKEN`，不需要把 NAS 的 `.env`、`AUTH_TOKEN`、SSO 密碼或 cookies 上傳到 GitHub。首次發布後，若要讓 NAS 免登入拉取，請在 GitHub 的套件設定將 `yt_dl_web` 設為 **Public**；儲存庫公開不代表容器套件也會自動公開。若保持私有，需先用具備 `read:packages` 權限的個人存取權杖登入 GHCR，再執行 `docker compose pull`。
+
+預設使用 `latest`；需要固定版本時，在 `.env` 設定 `DOWNLOADER_IMAGE=ghcr.io/asdfgh282812/yt_dl_web:v1.0.0` 或指定已發布的 `sha-...` 標籤，再重新拉取及啟動。請等 Actions 顯示發布成功後更新 NAS。
+
+### 本機建置備用方式
+
+開發或無法使用 GHCR 時，可疊加本機建置設定：
+
+```sh
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
+
+使用 `docker-compose.yml` 部署時，對應改成 `docker compose -f docker-compose.yml -f compose.build.yaml up -d --build`。
 
 對外使用 HTTPS 時設定 `PUBLIC_BASE_URL=https://你的下載工具網域`、`SESSION_HTTPS_ONLY=true`。避免在代理存取日誌紀錄 OIDC callback 的授權碼。登入與 cookies 匯入涉及敏感資料，正式服務應使用 HTTPS。
 

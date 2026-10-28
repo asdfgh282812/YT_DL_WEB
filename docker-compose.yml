@@ -1,6 +1,6 @@
 services:
   video-downloader:
-    build: .
+    image: ${DOWNLOADER_IMAGE:-ghcr.io/asdfgh282812/yt_dl_web:latest}
     container_name: video-downloader
     restart: unless-stopped
     ports:

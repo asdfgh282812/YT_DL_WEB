@@ -1,0 +1,5 @@
+services:
+  video-downloader:
+    image: video-downloader:local
+    pull_policy: build
+    build: .

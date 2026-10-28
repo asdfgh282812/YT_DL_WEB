@@ -1,8 +1,15 @@
 .env
+.env.*
+.git
+.github
+.DS_Store
 .venv
+venv
+node_modules
 __pycache__
 .pytest_cache
 config
 temp
+state
 tests
 docs
