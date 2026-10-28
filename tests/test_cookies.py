@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 import main
 from authentication import AUTH_TOKEN
 from media import youtube_dl
+from yt_dlp.cookies import YoutubeDLCookieJar
 
 HEADERS = {'Authorization': 'Bearer ' + AUTH_TOKEN}
 COOKIE = '# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tFALSE\t2147483647\tsession\ttest-value\n'
@@ -37,7 +38,9 @@ def test_cookie_upload_validation_snapshot_and_delete():
 def test_browser_selection_passes_profile_without_file(monkeypatch):
     captured = {}
     class Fake:
-        def __init__(self, options): captured.update(options)
+        def __init__(self, options):
+            captured.update(options)
+            self.cookiejar = YoutubeDLCookieJar()
         def __enter__(self): return self
         def __exit__(self, *args): pass
     monkeypatch.setattr('media.yt_dlp.YoutubeDL', Fake)

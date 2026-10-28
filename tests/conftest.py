@@ -1,5 +1,6 @@
 import functools
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Tests always configure their own token and never depend on a production secret.
+os.environ['AUTH_TOKEN'] = 'tests-only-administrator-token'
 import main
 from media import Settings
 from user_store import UserStore

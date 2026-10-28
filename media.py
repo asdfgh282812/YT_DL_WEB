@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
-from http.cookiejar import Cookie
+from http.cookiejar import Cookie, DefaultCookiePolicy
 
 import yt_dlp
 from pydantic import BaseModel, Field, field_validator
@@ -85,7 +85,13 @@ def youtube_dl(config, cookie_file, extra=None, cookies=None):
         elif source == 'browser':
             options['cookiesfrombrowser'] = (config.get('cookie_browser', 'firefox'), config.get('cookie_profile') or None, None, None)
         options.update(extra or {})
+        # Requests clones cookie jars without their policy. Urllib preserves the
+        # strict host-only rule for initial requests and every redirect.
+        options['compat_opts'] = {*options.get('compat_opts', ()), 'prefer-legacy-http-handler'}
         with yt_dlp.YoutubeDL(options) as ydl:
+            # Python's liberal Netscape policy otherwise sends host-only cookies
+            # to subdomains, unlike browsers. Apply to imported and legacy jars.
+            ydl.cookiejar.set_policy(DefaultCookiePolicy(strict_ns_domain=DefaultCookiePolicy.DomainStrictNonDomain))
             for item in cookies or []:
                 expires = item.get('expires', -1)
                 domain = item['domain']

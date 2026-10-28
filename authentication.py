@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.sessions import SessionMiddleware
 from user_store import UserStore, ADMIN_ID
 
-AUTH_TOKEN = os.environ.get('AUTH_TOKEN', 'your_secure_password_here')
+AUTH_TOKEN = os.environ.get('AUTH_TOKEN', '')
 
 
 class TokenLogin(BaseModel):
@@ -75,7 +75,44 @@ class Authentication:
                                 client_kwargs=kwargs)
 
     def token_valid(self, token):
-        return self.token_enabled and isinstance(token, str) and bool(token) and hmac.compare_digest(token.encode(), AUTH_TOKEN.encode())
+        return (self.token_enabled and bool(AUTH_TOKEN.strip()) and AUTH_TOKEN != 'your_secure_password_here'
+                and isinstance(token, str) and bool(token) and hmac.compare_digest(token.encode(), AUTH_TOKEN.encode()))
+
+    def reserve_login_attempt(self, request, req):
+        """Count in-flight checks before yielding to password hashing threads."""
+        host = request.client.host if request.client else ''
+        identity = ('token', '') if req.token else ('password', req.username.strip().casefold())
+        keys = ((host, 'source'), (host, *identity))
+        now = time.monotonic()
+        if len(self.login_failures) >= 10000:
+            # Expire old entries; never clear active limits when the map fills up.
+            self.login_failures = {
+                key: recent for key, attempts in self.login_failures.items()
+                if (recent := [attempt for attempt in attempts if now - attempt[0] < 300])
+            }
+        for key, limit in zip(keys, (50, 10)):
+            recent = [attempt for attempt in self.login_failures.get(key, []) if now - attempt[0] < 300]
+            if len(recent) >= limit:
+                raise HTTPException(429, '登入失敗次數過多，請五分鐘後再試')
+            if recent:
+                self.login_failures[key] = recent
+            else:
+                self.login_failures.pop(key, None)
+        if len(self.login_failures) + sum(key not in self.login_failures for key in keys) > 10000:
+            raise HTTPException(429, '登入請求過多，請稍後再試')
+        attempt = (now, object())
+        for key in keys:
+            self.login_failures.setdefault(key, []).append(attempt)
+        return keys, attempt
+
+    def release_login_attempt(self, keys, attempt):
+        # A successful login must not erase other requests' failures or reservations.
+        for key in keys:
+            attempts = self.login_failures.get(key, [])
+            if attempt in attempts:
+                attempts.remove(attempt)
+            if not attempts:
+                self.login_failures.pop(key, None)
 
     def session_user(self, connection):
         sid = connection.scope.get('session', {}).get('sid')
@@ -85,7 +122,7 @@ class Authentication:
         if user['method'] == 'sso':
             if not self.oidc_enabled or (self.allowed_subjects and user['sub'] not in self.allowed_subjects):
                 return None
-        elif not self.token_enabled:
+        elif not self.token_enabled or (user['method'] == 'token' and not self.token_valid(AUTH_TOKEN)):
             return None
         return user
 
@@ -174,11 +211,7 @@ class Authentication:
 
         @app.post('/api/auth/login')
         async def token_login(req: TokenLogin, request: Request):
-            key = (request.client.host if request.client else '', req.username.casefold())
-            now = time.time()
-            failures = [stamp for stamp in self.login_failures.get(key, []) if now - stamp < 300]
-            if len(failures) >= 10:
-                raise HTTPException(429, '登入失敗次數過多，請五分鐘後再試')
+            keys, attempt = self.reserve_login_attempt(request, req)
             user = None
             if req.token and self.token_valid(req.token):
                 user = self.store.get_user(ADMIN_ID)
@@ -188,12 +221,9 @@ class Authentication:
                 if user:
                     user.update(method='password', sub=user['id'])
             if not user:
-                if len(self.login_failures) > 10000:
-                    self.login_failures.clear()
-                self.login_failures[key] = failures + [now]
                 raise HTTPException(401, 'Token 無效或已停用' if req.token else '帳號、密碼錯誤或帳號已停用')
-            self.login_failures.pop(key, None)
             self.create_session(request, user)
+            self.release_login_attempt(keys, attempt)
             return {'success': True, 'user': user, 'quota': self.store.quota(user['id'])}
 
         @app.post('/api/auth/logout')
