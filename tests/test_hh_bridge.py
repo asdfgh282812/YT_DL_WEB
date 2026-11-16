@@ -136,3 +136,59 @@ def test_bridge_path_does_not_open_other_endpoints():
             assert client.post(path, headers=BRIDGE, json={}).status_code in (401, 404, 405), path
         assert client.get('/api/integrations/hh/grants').status_code in (401, 405)
         assert client.post('/api/integrations/hh/other', json={}).status_code == 401
+
+
+def put_supporters(client, items, headers=BRIDGE):
+    return client.put('/api/integrations/hh/supporters', headers=headers, json={'supporters': items})
+
+
+def test_supporter_snapshot_requires_secret_and_valid_payload(monkeypatch):
+    item = {'subject': 'sub-1', 'units': 5, 'until': iso(days=20)}
+    with TestClient(main.app) as client:
+        assert put_supporters(client, [item], headers={}).status_code == 401
+        assert put_supporters(client, [item], headers={'Authorization': 'Bearer wrong'}).status_code == 401
+        assert put_supporters(client, [{**item, 'units': 0}]).status_code == 422
+        assert put_supporters(client, [{**item, 'until': 'not-a-date'}]).status_code == 422
+        assert client.put('/api/integrations/hh/supporters', headers=BRIDGE, json={}).status_code == 422
+        assert put_supporters(client, [item]).json() == {'replaced': True, 'count': 1}
+        monkeypatch.setenv('YTDL_BRIDGE_SECRET', '')
+        assert put_supporters(client, [item]).status_code == 404
+
+
+def test_supporter_bonus_stacks_with_lots_and_vanishes_when_dropped_from_snapshot():
+    store = main.auth.store
+    user = sso_user('sub-1')
+    other = sso_user('sub-2')
+    default = store.policy()['default_daily_limit']
+    with TestClient(main.app) as client:
+        post(client, body('sub-1', 2))
+        put_supporters(client, [{'subject': 'sub-1', 'units': 5, 'until': iso(days=20)}])
+        quota = store.quota(user['id'])
+        assert (quota['supporter_bonus'], quota['bonus'], quota['limit']) == (5, 7, default + 7)
+        assert [batch['units'] for batch in quota['bonus_batches']] == [2]
+        assert store.quota(other['id'])['bonus'] == 0
+        put_supporters(client, [])  # subscription ended / revoked on Cloud
+        quota = store.quota(user['id'])
+        assert (quota['supporter_bonus'], quota['bonus']) == (0, 2)
+
+
+def test_supporter_bonus_ignores_expired_entries_and_covers_issuer_bound_subject():
+    store = main.auth.store
+    issued = sso_user('sub-9', issuer='https://sso.example')
+    with TestClient(main.app) as client:
+        put_supporters(client, [{'subject': 'sub-9', 'units': 5, 'until': iso(days=2)}])
+        assert store.quota(issued['id'])['supporter_bonus'] == 5
+        put_supporters(client, [{'subject': 'sub-9', 'units': 5, 'until': iso(days=-1)}])
+        assert store.quota(issued['id'])['supporter_bonus'] == 0
+
+
+def test_supporter_bonus_not_applied_to_admin_and_lets_reserve_take_more():
+    store = main.auth.store
+    admin = sso_user('sub-admin', role='admin')
+    user = sso_user('sub-1', daily_limit=1)
+    with TestClient(main.app) as client:
+        put_supporters(client, [{'subject': 'sub-admin', 'units': 5, 'until': iso(days=5)},
+                                {'subject': 'sub-1', 'units': 5, 'until': iso(days=5)}])
+    assert store.quota(admin['id'])['limit'] is None
+    store.reserve(user['id'], ['t1', 't2', 't3', 't4', 't5', 't6'])
+    assert store.quota(user['id'])['remaining'] == 0

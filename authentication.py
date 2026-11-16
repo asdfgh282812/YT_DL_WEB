@@ -176,7 +176,7 @@ class Authentication:
                     return JSONResponse({'detail': '不接受跨來源操作'}, status_code=403)
                 public = path in ('/api/auth/config', '/api/auth/login', '/api/auth/logout', '/api/auth/me') or (
                     request.method == 'GET' and path == '/api/v1/auth/sso/callback'
-                ) or (request.method == 'POST' and path == '/api/integrations/hh/grants')  # server-to-server; the handler checks YTDL_BRIDGE_SECRET
+                ) or (request.method == 'POST' and path == '/api/integrations/hh/grants') or (request.method == 'PUT' and path == '/api/integrations/hh/supporters')  # server-to-server; the handler checks YTDL_BRIDGE_SECRET
                 authorization = request.headers.get('authorization', '')
                 bearer = authorization[7:] if authorization.startswith('Bearer ') else ''
                 legacy_file_token = request.query_params.get('token') if request.method == 'GET' and path.startswith('/api/download/') else None

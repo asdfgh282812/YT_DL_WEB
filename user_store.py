@@ -86,6 +86,9 @@ class UserStore:
                     created_at REAL NOT NULL, expires_at REAL NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS quota_grants_subject ON quota_grants(subject, expires_at);
+                CREATE TABLE IF NOT EXISTS supporters (
+                    subject TEXT PRIMARY KEY, units INTEGER NOT NULL CHECK(units>0), expires_at REAL NOT NULL
+                );
             ''')
             if 'auth_version' not in {row['name'] for row in db.execute('PRAGMA table_info(users)')}:
                 db.execute('ALTER TABLE users ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 0')
@@ -247,13 +250,14 @@ class UserStore:
         default = db.execute('SELECT daily_limit FROM policy WHERE id=1').fetchone()[0]
         base = None if row['role'] == 'admin' else row['daily_limit'] if row['daily_limit'] is not None else default
         batches = [] if base is None else self.bonus_batches(db, row['oidc_sub'])
-        bonus = sum(batch['units'] for batch in batches)
+        supporter = 0 if base is None else self.supporter_bonus(db, row['oidc_sub'])
+        bonus = sum(batch['units'] for batch in batches) + supporter
         limit = None if base is None else base + bonus
         counts = db.execute("SELECT state,COUNT(*) AS n FROM downloads WHERE user_id=? AND (state='reserved' OR (state='completed' AND day=?)) GROUP BY state", (user_id, self.today())).fetchall()
         counts = {item['state']: item['n'] for item in counts}
         used, reserved = counts.get('completed', 0), counts.get('reserved', 0)
         return {'date': self.today(), 'timezone': str(self.timezone), 'limit': limit, 'base_limit': base, 'bonus': bonus,
-                'bonus_batches': batches, 'used': used,
+                'supporter_bonus': supporter, 'bonus_batches': batches, 'used': used,
                 'reserved': reserved, 'remaining': None if limit is None else max(0, limit - used - reserved),
                 'inherits_default': row['daily_limit'] is None}
 
@@ -276,6 +280,20 @@ class UserStore:
         rows = db.execute('SELECT units,expires_at FROM quota_grants WHERE subject=? AND expires_at>? ORDER BY expires_at',
                           (subject, time.time())).fetchall()
         return [{'units': row['units'], 'expires_at': row['expires_at']} for row in rows]
+
+    def supporter_bonus(self, db, binding):
+        subject = self.subject_of(binding)
+        if not subject:
+            return 0
+        row = db.execute('SELECT units FROM supporters WHERE subject=? AND expires_at>?', (subject, time.time())).fetchone()
+        return row['units'] if row else 0
+
+    def replace_supporters(self, supporters):
+        """Full snapshot from Cloud: whoever is missing (subscription ended/revoked) loses the bonus."""
+        with self.connection(write=True) as db:
+            db.execute('DELETE FROM supporters')
+            db.executemany('INSERT OR REPLACE INTO supporters VALUES (?,?,?)', supporters)
+        return len(supporters)
 
     def add_grant(self, request_id, subject, units, expires_at):
         """Idempotent bonus daily-limit grant; returns (duplicate, active_units)."""

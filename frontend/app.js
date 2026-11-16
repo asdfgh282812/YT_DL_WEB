@@ -11,11 +11,16 @@ createApp({
         const completedCount = computed(() => tasks.value.filter(task => task.state === 'COMPLETED').length);
         const quotaText = computed(() => quota.value.limit === null ? '下載部數不限' : `今日可再下載 ${quota.value.remaining} / ${quota.value.limit} 部`);
         const bonusText = computed(() => {
+            const parts = [];
+            if (quota.value.supporter_bonus > 0) parts.push(`支持者加成 +${quota.value.supporter_bonus}（訂閱期間有效）`);
             const first = (quota.value.bonus_batches || [])[0];
-            if (!first) return '';
-            const parts = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(first.expires_at * 1000));
-            const pick = type => (parts.find(part => part.type === type) || {}).value || '';
-            return `含好好幣擴容 +${quota.value.bonus}，最早 ${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')} 到期`;
+            if (first) {
+                const stamp = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(first.expires_at * 1000));
+                const pick = type => (stamp.find(part => part.type === type) || {}).value || '';
+                const batchTotal = quota.value.bonus_batches.reduce((sum, batch) => sum + batch.units, 0);
+                parts.push(`好好幣擴容 +${batchTotal}，最早 ${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')} 到期`);
+            }
+            return parts.length ? `含${parts.join('；')}` : '';
         });
         const showUserManagement = ref(false);
         const managedUsers = ref([]);
