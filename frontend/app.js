@@ -10,6 +10,13 @@ createApp({
         const isAdmin = computed(() => currentUser.value?.role === 'admin');
         const completedCount = computed(() => tasks.value.filter(task => task.state === 'COMPLETED').length);
         const quotaText = computed(() => quota.value.limit === null ? '下載部數不限' : `今日可再下載 ${quota.value.remaining} / ${quota.value.limit} 部`);
+        const bonusText = computed(() => {
+            const first = (quota.value.bonus_batches || [])[0];
+            if (!first) return '';
+            const parts = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(first.expires_at * 1000));
+            const pick = type => (parts.find(part => part.type === type) || {}).value || '';
+            return `含好好幣擴容 +${quota.value.bonus}，最早 ${pick('month')}/${pick('day')} ${pick('hour')}:${pick('minute')} 到期`;
+        });
         const showUserManagement = ref(false);
         const managedUsers = ref([]);
         const userPolicy = ref({ default_daily_limit: 5, timezone: 'Asia/Taipei' });
@@ -787,7 +794,7 @@ createApp({
         // ==========================================
         return {
             isAuthenticated, tokenInput, usernameInput, passwordInput, authError, login, logout, authConfig, currentUser, loginSso,
-            quota, quotaText, isAdmin, completedCount, downloadAll,
+            quota, quotaText, bonusText, isAdmin, completedCount, downloadAll,
             showUserManagement, managedUsers, userPolicy, newUser, userBusy, openUsers, savePolicy, createUser, saveUser,
             showSites, siteAccounts, openSites, forgetSite,
             activeDownloads, config, outputFormat, audioFormat, referer, userAgent, sourceChanged, systemStatus, testCookies, deleteCookies, retryTask,

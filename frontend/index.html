@@ -759,6 +759,8 @@
                         </div>
 
                         <p v-if="quota.limit !== null" class="caption center tnum quota">{{ quotaText }} · 已完成 {{ quota.used }} · 預留 {{ quota.reserved }}</p>
+                        <p v-if="quota.limit !== null && quota.bonus > 0" class="caption center tnum quota">{{ bonusText }}</p>
+                        <p v-if="quota.limit !== null && quota.remaining === 0" class="caption center quota">想多下載幾部？到帳好嗎 App 的農場 → 好好幣商店，用 2 好好幣加開 1 部，3 天內有效。</p>
 
                         <details class="adv">
                             <summary class="adv-sum">更多選項<svg class="ico ico-sm chev"><use href="#i-chevron-right"></use></svg></summary>
@@ -1079,7 +1081,7 @@
                                     <div v-for="user in managedUsers" :key="user.id" :data-user-id="user.id" class="user-card">
                                         <div class="user-card-head">
                                             <span style="font-weight:600;word-break:break-all">{{ user.username }} <span class="badge" style="margin-left:6px">{{ user.oidc_sub ? 'SSO' : user.id === 'bootstrap-admin' ? '系統管理者' : '本機帳號' }}</span></span>
-                                            <span class="caption tnum">今日完成 {{ user.quota.used }} · 預留 {{ user.quota.reserved }} · {{ user.quota.limit === null ? '不限' : `上限 ${user.quota.limit}` }}</span>
+                                            <span class="caption tnum">今日完成 {{ user.quota.used }} · 預留 {{ user.quota.reserved }} · {{ user.quota.limit === null ? '不限' : user.quota.bonus > 0 ? `上限 ${user.quota.limit}（含擴容 +${user.quota.bonus}）` : `上限 ${user.quota.limit}` }}</span>
                                         </div>
                                         <div class="form-grid">
                                             <label class="field"><span>名稱</span><input v-model="user.name" class="input"></label>

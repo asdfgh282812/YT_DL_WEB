@@ -26,6 +26,7 @@ from site_cookies import install_site_routes, site_for_url, needs_login, domain_
 from cookie_scopes import import_cookie_groups
 from typing import Literal
 from archives import install_archive_routes
+from integrations import install_bridge_routes
 
 # --- Configuration ---
 TEMP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "temp"))
@@ -666,6 +667,7 @@ async def update_ytdlp(background_tasks: BackgroundTasks):
 install_account_routes(app, auth, broadcast_state)
 install_site_routes(app, auth, lambda: COOKIE_FILE)
 install_archive_routes(app, lambda: tasks)
+install_bridge_routes(app, auth, broadcast_state)
 
 class FrontendFiles(StaticFiles):
     """Serve the UI with revalidation so a page and its script never come from different releases."""

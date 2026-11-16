@@ -24,6 +24,15 @@ FastAPI + Vue + yt-dlp 的媒體下載介面，支援獨立使用者、每日下
 
 使用者只會看到自己的任務、檔案、ZIP 與網站登入資料。WebSocket 與下載端點同樣檢查所有者；管理者的任務畫面也不混入其他人的任務。伺服器下載參數、使用者管理與系統更新僅限管理者。
 
+## 好好幣擴容（帳好嗎整合）
+
+帳好嗎 App／Web 農場的「好好幣商店」可用 2 好好幣替自己的下載額度擴容：每次兌換讓**每日上限 +1**，從兌換起 **3 天**內有效。額度已用完時，介面會提示這個管道；本站不顯示連結。
+
+- **身分對應**：以 OIDC `sub` 為準。帳好嗎 Cloud 與本站必須使用**同一個身分提供者**（例如同一台 Synology SSO），`sub` 才會一致。本站使用者的 `oidc_sub`（純 `sub` 或 `[issuer, sub]`）都支援；本機密碼帳號沒有 `sub`，不會有擴容。擴容以 `sub` 為鍵保存，使用者尚未登入過本站也能先入帳。
+- **設定**：本站與帳好嗎 Cloud 設定同一組長隨機密鑰 `YTDL_BRIDGE_SECRET`（本站 `.env`；Cloud 端的對應變數見 Cloud 文件）。留空即停用，橋接端點回 404。
+- **橋接 API**：`POST /api/integrations/hh/grants`，`Authorization: Bearer <YTDL_BRIDGE_SECRET>`，內容 `{"requestId": UUID, "subject": "sub", "units": 1..100, "expiresAt": ISO-8601 UTC}`。`expiresAt` 須在現在之後、30 天內，否則 422；密鑰錯誤 401；同一 `requestId` 且內容相同回 200 `duplicate: true`，內容不同回 409；成功回 `{"granted": true, "duplicate": false, "activeUnits": N}`。此路徑僅限 `POST`，不走使用者登入，其他 `/api/` 路徑不受影響。
+- **額度計算**：非管理者每日上限 = 基礎上限（個人或全體預設）+ 有效擴容；基礎上限為 0 時擴容仍生效。管理者仍不限部數。擴容到期後自動不計，已接受的下載不受影響。`/api/auth/me` 與 WebSocket 的 `quota` 多了 `base_limit`、`bonus`、`bonus_batches`。管理者「使用者」清單顯示「上限 N（含擴容 +b）」，可編輯的仍是基礎上限。
+
 ## cookies.txt 使用教學
 
 工具已移除伺服器瀏覽器互動登入。SSO 用於登入此工具；影片網站所需的登入資料由個人匯入的 cookies.txt 提供。

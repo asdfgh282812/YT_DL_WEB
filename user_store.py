@@ -80,6 +80,12 @@ class UserStore:
                     expires_at REAL NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS login_session_user ON login_sessions(user_id);
+                CREATE TABLE IF NOT EXISTS quota_grants (
+                    request_id TEXT PRIMARY KEY, subject TEXT NOT NULL,
+                    units INTEGER NOT NULL CHECK(units>0),
+                    created_at REAL NOT NULL, expires_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS quota_grants_subject ON quota_grants(subject, expires_at);
             ''')
             if 'auth_version' not in {row['name'] for row in db.execute('PRAGMA table_info(users)')}:
                 db.execute('ALTER TABLE users ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 0')
@@ -239,13 +245,53 @@ class UserStore:
         if not row:
             raise StoreError('找不到使用者')
         default = db.execute('SELECT daily_limit FROM policy WHERE id=1').fetchone()[0]
-        limit = None if row['role'] == 'admin' else row['daily_limit'] if row['daily_limit'] is not None else default
+        base = None if row['role'] == 'admin' else row['daily_limit'] if row['daily_limit'] is not None else default
+        batches = [] if base is None else self.bonus_batches(db, row['oidc_sub'])
+        bonus = sum(batch['units'] for batch in batches)
+        limit = None if base is None else base + bonus
         counts = db.execute("SELECT state,COUNT(*) AS n FROM downloads WHERE user_id=? AND (state='reserved' OR (state='completed' AND day=?)) GROUP BY state", (user_id, self.today())).fetchall()
         counts = {item['state']: item['n'] for item in counts}
         used, reserved = counts.get('completed', 0), counts.get('reserved', 0)
-        return {'date': self.today(), 'timezone': str(self.timezone), 'limit': limit, 'used': used,
+        return {'date': self.today(), 'timezone': str(self.timezone), 'limit': limit, 'base_limit': base, 'bonus': bonus,
+                'bonus_batches': batches, 'used': used,
                 'reserved': reserved, 'remaining': None if limit is None else max(0, limit - used - reserved),
                 'inherits_default': row['daily_limit'] is None}
+
+    @staticmethod
+    def subject_of(binding):
+        """oidc_sub is either a bare subject or JSON '[issuer, subject]'."""
+        if not binding:
+            return None
+        if binding.startswith('['):
+            try:
+                return json.loads(binding)[1]
+            except (ValueError, IndexError, TypeError):
+                return None
+        return binding
+
+    def bonus_batches(self, db, binding):
+        subject = self.subject_of(binding)
+        if not subject:
+            return []
+        rows = db.execute('SELECT units,expires_at FROM quota_grants WHERE subject=? AND expires_at>? ORDER BY expires_at',
+                          (subject, time.time())).fetchall()
+        return [{'units': row['units'], 'expires_at': row['expires_at']} for row in rows]
+
+    def add_grant(self, request_id, subject, units, expires_at):
+        """Idempotent bonus daily-limit grant; returns (duplicate, active_units)."""
+        now = time.time()
+        with self.connection(write=True) as db:
+            db.execute('DELETE FROM quota_grants WHERE expires_at<?', (now - 30 * 86400,))
+            previous = db.execute('SELECT subject,units FROM quota_grants WHERE request_id=?', (request_id,)).fetchone()
+            if previous:
+                if previous['subject'] != subject or previous['units'] != units:
+                    raise StoreError('requestId 已用於不同內容')
+                duplicate = True
+            else:
+                db.execute('INSERT INTO quota_grants VALUES (?,?,?,?,?)', (request_id, subject, units, now, expires_at))
+                duplicate = False
+            active = db.execute('SELECT COALESCE(SUM(units),0) FROM quota_grants WHERE subject=? AND expires_at>?', (subject, now)).fetchone()[0]
+        return duplicate, active
 
     def reserve(self, user_id, task_ids):
         with self.connection(write=True) as db:
